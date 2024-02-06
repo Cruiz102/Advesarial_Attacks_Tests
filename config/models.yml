@@ -1,0 +1,6 @@
+
+ model: ViTForImageClassification
+ model_name: google/vit-base-patch16-224
+
+
+ 

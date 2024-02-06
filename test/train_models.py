@@ -1,14 +1,20 @@
 import argparse
-from transformers import AutoModelForImageClassification, AutoConfig, TrainingArguments, Trainer
-from transformers import DefaultDataCollator, AutoFeatureExtractor
+from transformers import AutoModelForImageClassification, AutoConfig, TrainingArguments, Trainer, AutoModel
+from transformers import DefaultDataCollator, AutoImageProcessor
 from datasets import load_dataset
 import torch
 import os
-
+# import wandb
+import safetensors as safetensor
+import tqdm
 
 # Ensure wandb is installed: pip install wandb
-import wandb
+# import wanndb
+import yaml
 
+def read_yaml(yaml_file):
+    with open(yaml_file, 'r') as f:
+        return yaml.safe_load(f)
 
 def save_checkpoint(model, output_dir, epoch):
     """Save model checkpoint in SafeTensor format."""
@@ -20,27 +26,37 @@ def save_checkpoint(model, output_dir, epoch):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Fine-tune a transformer model for image classification.")
-    parser.add_argument("--model_name_or_path", type=str, help="Model identifier from Huggingface Models (e.g., google/vit-base-patch16-224).")
-    parser.add_argument("--dataset_path", type=str, help="Path to the dataset to be used for training.")
-    parser.add_argument("--num_labels", type=int, default=2, help="Number of labels for the classification task.")
-    parser.add_argument("--output_dir", type=str, default="./outputs", help="Where to store the fine-tuned model.")
-    parser.add_argument("--use_wandb", action="store_true", help="Use Weights & Biases for experiment tracking.")
-    parser.add_argument("--num_train_epochs", type=int, default=3, help="Number of training epochs.")
+    parser.add_argument("--dataset_config", type=str, default="./configs/dataset.yaml", help="Path to the dataset configuration file.")
+    parser.add_argument("--model_config", type=str, default="./configs/model.yaml", help="")
+    parser.add_argument("--training_config", type=str, default="./configs/training_config.yaml", help="")
     args = parser.parse_args()
     return args
+
+
+def create_model_classifier_from_image_classification(model:AutoModelForImageClassification, config):
+    """Create a model classifier from an image classification model."""
+    # Create a new classifier head
+    classifier_head = torch.nn.Linear(config.hidden_size, config.num_labels)
+    # Replace the classifier head
+    model.classifier = classifier_head
+    #Initialize again the weights
+    model.post_init()
+    return model
+
 
 def main():
     args = parse_args()
 
     # Load the model and tokenizer
-    config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=args.num_labels)
-    model = AutoModelForImageClassification.from_pretrained(args.model_name_or_path, config=config)
-    feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_name_or_path)
+    config = AutoConfig.from_pretrained("google/vit-base-patch16-224", num_labels=args.num_labels)
+    pretrained_model = AutoModel.from_pretrained("google/vit-base-patch16-224")
+    classification_model = AutoModelForImageClassification.from_config("google/vit-base-patch16-224", config=config)
+    image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 
     # Prepare dataset
     datasets = load_dataset("imagefolder", data_dir=args.dataset_path)
     def transform(examples):
-        examples['pixel_values'] = [feature_extractor(images=image, return_tensors="pt").pixel_values.squeeze() for image in examples['image']]
+        examples['pixel_values'] = [image_processor(images=image, return_tensors="pt").pixel_values.squeeze() for image in examples['image']]
         return examples
     datasets = datasets.map(transform, batched=True)
     datasets.set_format(type='torch', columns=['pixel_values', 'label'])
@@ -56,23 +72,23 @@ def main():
         logging_dir='./logs',
         logging_steps=10,
         push_to_hub=False,
+        report_to=""
     )
 
     # Initialize Trainer
     trainer = Trainer(
-        model=model,
+        model=classification_model,
         args=training_args,
         compute_metrics=None,
         train_dataset=datasets["train"],
         eval_dataset=datasets["test"],
-        tokenizer=feature_extractor,
         data_collator=DefaultDataCollator(),
     )
 
     # Train and save the model
     trainer.train()
-    model.save_pretrained(args.output_dir)
-    feature_extractor.save_pretrained(args.output_dir)
+    classification_model.save_pretrained(args.output_dir)
+    image_processor.save_pretrained(args.output_dir)
 
 
 
@@ -81,9 +97,9 @@ def main():
     save_checkpoint(model, args.output_dir, epoch="final")
     feature_extractor.save_pretrained(args.output_dir)
 
-    # Close W&B run
-    if args.use_wandb:
-        wandb.finish()
+    # # Close W&B run
+    # if args.use_wandb:
+    #     wandb.finish()
 
 
 if __name__ == "__main__":

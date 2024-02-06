@@ -1,0 +1,23 @@
+base:
+ - outpit_dir: output_dir
+ - epochs: 10
+ - weight_decay: 0.01
+ - learning_rate: 0.001
+ - checkpoint: "safetensor checkpoint"
+ - shards: 1
+ - activate_accelerate: true
+ -
+
+ 
+
+
+wandb:
+- enable_wandb: True
+- wandb_project: "test"
+- wandb_run_name: "test"
+- loggin_steps: 1 
+
+
+
+hub:
+ - push_to_hub: True
