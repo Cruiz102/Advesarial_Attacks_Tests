@@ -7,9 +7,7 @@ import os
 # import wandb
 import safetensors as safetensor
 import tqdm
-
-# Ensure wandb is installed: pip install wandb
-# import wanndb
+import typing
 import yaml
 
 def read_yaml(yaml_file):
@@ -47,6 +45,32 @@ def create_model_classifier_from_image_classification(model:AutoModelForImageCla
 def main():
     args = parse_args()
 
+    # model configurations
+    model_config = read_yaml(args.model_config)
+    dataset_config = read_yaml(args.dataset_config)
+    training_config = read_yaml(args.training_config)
+
+
+    # Models Params and checking    
+    hugginface_model: str = model_config["hugginface_model"]
+    model_name : str = model_config["model_name"]
+
+
+    #Dataset Params
+    dataset_dir: str = dataset_config["dataset_dir"]
+
+
+# Training Params
+    model_checkpoint_path: str = training_config["model_checkpoint"]
+    output_dir: str = training_config["output_dir"] 
+
+    if not model_name and not model_checkpoint_path:
+        raise Exception("""Neither a hugginface Pretrained model or a Checkpoint has been specified. Please in your model configuration
+                            specify the hugginface model_name or specify a checkpoint to start the training.""")
+    
+
+    
+
     # Load the model and tokenizer
     config = AutoConfig.from_pretrained("google/vit-base-patch16-224", num_labels=args.num_labels)
     pretrained_model = AutoModel.from_pretrained("google/vit-base-patch16-224")
@@ -54,10 +78,8 @@ def main():
     image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 
     # Prepare dataset
-    datasets = load_dataset("imagefolder", data_dir=args.dataset_path)
-    def transform(examples):
-        examples['pixel_values'] = [image_processor(images=image, return_tensors="pt").pixel_values.squeeze() for image in examples['image']]
-        return examples
+    datasets = load_dataset(, data_dir=args.dataset_path)
+    
     datasets = datasets.map(transform, batched=True)
     datasets.set_format(type='torch', columns=['pixel_values', 'label'])
 

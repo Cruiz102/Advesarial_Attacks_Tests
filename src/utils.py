@@ -15,6 +15,15 @@ import torchvision
 import torchvision.datasets as dsets
 import torchvision.transforms as transforms
 
+
+
+def format_dataset_for_image_classification():
+    # Format a selection of custom data for the user 
+    # into a Pytorch Dataset format type
+
+    pass
+
+
 def get_imagenet_data():
     MEAN = [0.485, 0.456, 0.406]
     STD = [0.229, 0.224, 0.225]
