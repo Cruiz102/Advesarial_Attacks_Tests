@@ -14,8 +14,10 @@ import torch
 import torchvision
 import torchvision.datasets as dsets
 import torchvision.transforms as transforms
-
-
+import yaml
+def read_yaml(yaml_file):
+    with open(yaml_file, 'r') as f:
+        return yaml.safe_load(f)
 
 def format_dataset_for_image_classification():
     # Format a selection of custom data for the user 

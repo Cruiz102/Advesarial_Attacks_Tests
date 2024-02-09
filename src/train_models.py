@@ -41,6 +41,29 @@ def create_model_classifier_from_image_classification(model:AutoModelForImageCla
     model.post_init()
     return model
 
+from transformers import DataCollatorWithPadding
+from PIL import Image
+import torch
+
+class ImageProcessingDataCollator(DataCollatorWithPadding):
+    def __init__(self, feature_extractor, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.feature_extractor = feature_extractor
+
+    def __call__(self, features):
+        # Convert file paths or PIL images in 'features' to actual images
+        images = [Image.open(feature['file_path']).convert("RGB") if isinstance(feature['file_path'], str) else feature['file_path'] for feature in features]
+        labels = [feature['label'] for feature in features]
+        
+        # Use the feature_extractor to preprocess the images
+        batch = self.feature_extractor(images=images, return_tensors="pt")
+        
+        # Add labels to the batch
+        batch['labels'] = torch.tensor(labels)
+        
+        return batch
+
+
 
 def main():
     args = parse_args()
@@ -78,10 +101,19 @@ def main():
     image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 
     # Prepare dataset
-    datasets = load_dataset(, data_dir=args.dataset_path)
-    
-    datasets = datasets.map(transform, batched=True)
-    datasets.set_format(type='torch', columns=['pixel_values', 'label'])
+    datasets = load_dataset(dataset_dir, data_dir=args.dataset_path)
+
+    def preprocess_images(examples):
+        return image_processor(images=examples["image"], return_tensors="pt")
+#
+
+    # Apply preprocessing
+    preprocess_images_before_training = True
+    if preprocess_images_before_training:
+        processed_dataset = datasets.map(preprocess_images, batched=True)
+        processed_dataset.set_format(type="torch", columns=["pixel_values", "label"])
+
+    # Save the Data
 
     # Define training arguments
     training_args = TrainingArguments(
@@ -112,12 +144,6 @@ def main():
     classification_model.save_pretrained(args.output_dir)
     image_processor.save_pretrained(args.output_dir)
 
-
-
-
-    # Save the model and tokenizer in SafeTensor format at the end of training
-    save_checkpoint(model, args.output_dir, epoch="final")
-    feature_extractor.save_pretrained(args.output_dir)
 
     # # Close W&B run
     # if args.use_wandb:

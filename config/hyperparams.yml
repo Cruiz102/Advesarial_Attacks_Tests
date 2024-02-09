@@ -1,7 +1,31 @@
+model:
+  name: 'ResNet18' 
+  hugginface_model: "hugginface"
+  local_model_path: "jfasldjflj"
+  use_preprocessor: True
+  local_preprocessor: "path"
+  enable_resize: True
+  resize_size: 224
+  
+
+
 one_pixel:
+  enable_attack: True
 
 
-Carlini_weiner:
+carlini_weiner:
+  enable_attack: True
+  kappa: 0.01
+  steps: 10000 
+
+
+PGD:
+  enable_attack: True
+
+
+FGSM:
+  enable_attack: True
+  epsilon: 0.3
 
 
 
