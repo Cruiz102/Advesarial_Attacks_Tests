@@ -11,6 +11,11 @@ model:
 
 one_pixel:
   enable_attack: True
+  steps: 10
+  pixels : 1
+  population_size: 100
+
+
 
 
 carlini_weiner:
@@ -21,11 +26,12 @@ carlini_weiner:
 
 PGD:
   enable_attack: True
+  steps: 10000
 
 
 FGSM:
   enable_attack: True
   epsilon: 0.3
-
+  steps: 10000
 
 
