@@ -7,7 +7,11 @@ model:
   enable_resize: True
   resize_size: 224
   
-
+dataset:
+  train_on_dataset: True
+  dataset_name: true
+  dataset_path: "path"
+  
 
 one_pixel:
   enable_attack: True

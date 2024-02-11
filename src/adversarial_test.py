@@ -10,7 +10,9 @@ from transformers import AutoModelForImageClassification, AutoConfig, TrainingAr
 import torchattacks as ta
 from utils import read_yaml
 import argparse 
-
+from datasets import load_dataset
+import torch.nn as nn
+import torch
 # Read the yaml config file of the configuration of the attacks
 # import tqdm
 attacks_config = read_yaml("./configs/attacks.yaml")
@@ -66,6 +68,12 @@ def main():
     enable_PGD = attacks_config["PGD"]["enable_attack"]
     steps_pgd = attacks_config["PGD"]["steps"]
 
+    if attacks_config["dataset"]["train_on_dataset"]:
+        dataset = load_dataset(args.dataset_config) 
+        images =dataset["validation"]["image"]
+        labels = dataset["validation"]["label"]
+
+
     if enable_one_pixel_attack:
         one_pixel_attack = ta.OnePixel(model= model,pixels= num_pixels, steps= onepixel_steps, popsize= population)
 
@@ -76,7 +84,17 @@ def main():
         pgd_attack = ta.PGD(model, steps=steps_pgd)
 
 
-    
+def test_attack(attacker: ta.Attack, model: nn.Module, images: torch.Tensor, labels: torch.Tensor, device: str, output_dir: str):
+    """
+    Test the given attack on the given model.
+    """
+    model.eval()
+    attacker.set_mode_default()
+    adversarial_images = attacker(images, labels)
+
+    # Save the adversarial images in a jpeg
+    # file.
+
 
 
 
