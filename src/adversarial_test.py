@@ -14,7 +14,7 @@ from datasets import load_dataset
 import torch.nn as nn
 import torch
 # Read the yaml config file of the configuration of the attacks
-# import tqdm
+import tqdm
 attacks_config = read_yaml("./configs/attacks.yaml")
 
 
@@ -45,8 +45,7 @@ def main():
 
     #Load the model from the checkpoint 
     model = AutoModelForImageClassification.from_pretrained(args.model_checkpoint)
-    enable_cw = attacks_config["carlini_wiener"]["enable_attack"]
-    
+    image_processor = ta.utils.ImageProcessor(model=model, device="cuda")
 
 
     # One Pixel Attack Parameters
@@ -84,16 +83,45 @@ def main():
         pgd_attack = ta.PGD(model, steps=steps_pgd)
 
 
-def test_attack(attacker: ta.Attack, model: nn.Module, images: torch.Tensor, labels: torch.Tensor, device: str, output_dir: str):
+
+# this method if specified shoudexecute a plotting  of the results of the attacks
+def test_attack_individually(attacker: ta.Attack, model: nn.Module, images: torch.Tensor, labels: torch.Tensor, device: str, output_dir: str):
     """
-    Test the given attack on the given model.
+    Test the given attack on the given model using tqdm for progress display.
     """
+    
     model.eval()
     attacker.set_mode_default()
-    adversarial_images = attacker(images, labels)
-
-    # Save the adversarial images in a jpeg
-    # file.
+    
+    # Assuming 'images' is a batch of images, you might want to iterate over them
+    # If 'images' is already a batch and you process it all at once, adapt accordingly
+    
+    # Initialize statistics
+    success_count = 0
+    total_count = len(images)
+    
+    # Prepare a progress bar
+    pbar = tqdm(total=total_count, desc='Testing Attack')
+    
+    for i in range(total_count):
+        img, label = images[i:i+1].to(device), labels[i:i+1].to(device) # Process one image at a time
+        adv_images = attacker(img, label)
+        
+        # Example of a simple check: See if the model's prediction changes
+        with torch.no_grad():
+            original_pred = model(img).max(1)[1] # Get the index of the max log-probability
+            adv_pred = model(adv_images).max(1)[1]
+            if original_pred != adv_pred:
+                success_count += 1
+        
+        pbar.update(1)
+    
+    pbar.close()
+    
+    # Print or log the success rate
+    success_rate = success_count / total_count * 100
+    print(f"Attack Success Rate: {success_rate:.2f}%")
+    
 
 
 

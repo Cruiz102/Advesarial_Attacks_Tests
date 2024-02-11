@@ -19,5 +19,9 @@ In general we would want for the project to have the following things , so any c
 - Feature Enhancements: Contributions that introduce new functionalities or features to improve adversarial attack testing are highly encouraged. Feel free to create an issue to discuss your ideas.
 
 
+Exporting TensorRT engine.
+
+For exporting a trt model and use it in the live_inference script you first must ensure that you  have CUDA and tensorRT installed in your machine.
+
 # Getting Started:
 Not yet ready for this.

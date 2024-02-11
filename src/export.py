@@ -2,6 +2,9 @@ import torch
 import torch.onnx
 import argparse
 import os
+import tensorrt as trt
+import pycuda.driver as cuda
+import pycuda.autoinit  # This is needed for initializing CUDA driver
 
 def infer_input_shape(model):
     # Attempt to infer the input shape from the first layer of the model
@@ -42,10 +45,35 @@ def convert_pt_to_onnx(pt_file_path, onnx_file_path):
     
     print(f"Model has been converted to ONNX format and saved to {onnx_file_path}")
 
+
+def build_engine_onnx(model_file):
+    TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+    builder = trt.Builder(TRT_LOGGER)
+    network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
+    parser = trt.OnnxParser(network, TRT_LOGGER)
+    
+    with open(model_file, 'rb') as model:
+        if not parser.parse(model.read()):
+            print('ERROR: Failed to parse the ONNX file.')
+            for error in range(parser.num_errors):
+                print(parser.get_error(error))
+            return None
+    
+    config = builder.create_builder_config()
+    config.max_workspace_size = 1 << 20  # Adjust workspace size as needed
+    builder.max_batch_size = 1  # Adjust max batch size as needed
+    
+    engine = builder.build_engine(network, config)
+    return engine
+def save_engine(engine, engine_file_path):
+    with open(engine_file_path, "wb") as f:
+        f.write(engine.serialize())
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Convert a PyTorch model to ONNX format.")
+    parser = argparse.ArgumentParser(description="Convert a PyTorch model to ONNX and TensorRT format.")
     parser.add_argument("pt_file_path", type=str, help="Path to the .pt model file")
     parser.add_argument("onnx_file_path", type=str, help="Path where the ONNX model will be saved")
+    parser.add_argument("trt_engine_path", type=str, help="Path where the TensorRT engine will be saved")
     
     args = parser.parse_args()
 
@@ -53,5 +81,13 @@ if __name__ == "__main__":
     if not os.path.isfile(args.pt_file_path):
         raise FileNotFoundError(f"The specified .pt file does not exist: {args.pt_file_path}")
     
-    # Convert the model
-    convert_pt_to_onnx(args.pt_file_path, args.onnx_file_path)
+    # Convert the model to ONNX and then to TensorRT
+    print("Converting PyTorch model to ONNX format...")
+    convert_pt_to_onnx(args.pt_file_path, args.onnx_file_path)  # Assumes this function is defined earlier
+    print("Converting ONNX model to TensorRT engine...")
+    engine = build_engine_onnx(args.onnx_file_path)
+    if engine:
+        save_engine(engine, args.trt_engine_path)
+        print(f"TensorRT engine saved to {args.trt_engine_path}")
+    else:
+        print("Failed to build TensorRT engine.")

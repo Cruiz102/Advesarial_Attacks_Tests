@@ -6,7 +6,13 @@ model:
   local_preprocessor: "path"
   enable_resize: True
   resize_size: 224
+  yolo_model: True
+
+attack:
+  targeted: True
+  target_list: [(),()] 
   
+   
 dataset:
   train_on_dataset: True
   dataset_name: true
@@ -22,20 +28,24 @@ one_pixel:
 
 
 
+
 carlini_weiner:
   enable_attack: True
   kappa: 0.01
   steps: 10000 
+  load_attack: "path"
 
 
 PGD:
   enable_attack: True
   steps: 10000
+  load_attack: "path"
 
 
 FGSM:
   enable_attack: True
   epsilon: 0.3
   steps: 10000
+  load_attack: "path"
 
 

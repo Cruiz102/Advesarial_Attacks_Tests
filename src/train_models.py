@@ -9,6 +9,7 @@ import safetensors as safetensor
 import tqdm
 import typing
 import yaml
+from rai_toolbox.optim import ParamTransformingOptimizer
 
 def read_yaml(yaml_file):
     with open(yaml_file, 'r') as f:
@@ -144,10 +145,6 @@ def main():
     classification_model.save_pretrained(args.output_dir)
     image_processor.save_pretrained(args.output_dir)
 
-
-    # # Close W&B run
-    # if args.use_wandb:
-    #     wandb.finish()
 
 
 if __name__ == "__main__":
