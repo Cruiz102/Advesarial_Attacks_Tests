@@ -15,6 +15,7 @@ import torch.nn as nn
 import torch
 # Read the yaml config file of the configuration of the attacks
 import tqdm
+from utils import plot_grid
 attacks_config = read_yaml("./configs/attacks.yaml")
 
 
@@ -48,6 +49,9 @@ def main():
     image_processor = ta.utils.ImageProcessor(model=model, device="cuda")
 
 
+    # Attacks Base Configurations
+    targeted = attacks_config["attack"]["targeted"]
+    new_targeted_labels =attacks_config["attack"]["labels"]
     # One Pixel Attack Parameters
     enable_one_pixel_attack = attacks_config["one_pixel"]["enable_attack"]
     onepixel_steps = attacks_config["one_pixel"]["steps"]
@@ -85,7 +89,7 @@ def main():
 
 
 # this method if specified shoudexecute a plotting  of the results of the attacks
-def test_attack_individually(attacker: ta.Attack, model: nn.Module, images: torch.Tensor, labels: torch.Tensor, device: str, output_dir: str):
+def test_attack_individually(attacker: ta.Attack, model: nn.Module, images: torch.Tensor, labels: torch.Tensor, device: str, output_dir: str, targeted: bool):
     """
     Test the given attack on the given model using tqdm for progress display.
     """
@@ -105,6 +109,8 @@ def test_attack_individually(attacker: ta.Attack, model: nn.Module, images: torc
     
     for i in range(total_count):
         img, label = images[i:i+1].to(device), labels[i:i+1].to(device) # Process one image at a time
+        if targeted:
+            attacker.set_mode_targeted_by_label()
         adv_images = attacker(img, label)
         
         # Example of a simple check: See if the model's prediction changes
@@ -115,7 +121,8 @@ def test_attack_individually(attacker: ta.Attack, model: nn.Module, images: torc
                 success_count += 1
         
         pbar.update(1)
-    
+        plot_grid(adv_images)
+        plot_grid(original_pred)    
     pbar.close()
     
     # Print or log the success rate

@@ -1,0 +1,5 @@
+vit:
+  interpolation: true
+
+dino:
+  return_attention: True

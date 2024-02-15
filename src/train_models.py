@@ -42,28 +42,6 @@ def create_model_classifier_from_image_classification(model:AutoModelForImageCla
     model.post_init()
     return model
 
-from transformers import DataCollatorWithPadding
-from PIL import Image
-import torch
-
-class ImageProcessingDataCollator(DataCollatorWithPadding):
-    def __init__(self, feature_extractor, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.feature_extractor = feature_extractor
-
-    def __call__(self, features):
-        # Convert file paths or PIL images in 'features' to actual images
-        images = [Image.open(feature['file_path']).convert("RGB") if isinstance(feature['file_path'], str) else feature['file_path'] for feature in features]
-        labels = [feature['label'] for feature in features]
-        
-        # Use the feature_extractor to preprocess the images
-        batch = self.feature_extractor(images=images, return_tensors="pt")
-        
-        # Add labels to the batch
-        batch['labels'] = torch.tensor(labels)
-        
-        return batch
-
 
 
 def main():
