@@ -10,6 +10,18 @@ This project focuses on testing adversarial attacks across various models and da
  - Hugging Face Models: Leverages models from Hugging Face to train on specific datasets and assess their performance under adversarial conditions.
 
  - Live Inference Script: Includes a script for real-time model inference using a webcam, allowing for dynamic testing environments.
+
+
+### Using Accelerate 
+
+Accelerate is a very easy to use framework for optimizing the training Models on efficient training pipelines.
+For using accelerate make sure to install it with pip3 install accelerate.
+
+Before running accelerate with the Hugginface Trainer you first have to configure your training pipeline by running:
+```bash
+accelerate config
+```
+
 ### Contributing
 ---
 In general we would want for the project to have the following things , so any contributions to this areas will be well welcome.

@@ -4,12 +4,13 @@ from transformers import DefaultDataCollator, AutoImageProcessor
 from datasets import load_dataset
 import torch
 import os
-# import wandb
+import wandb
 import safetensors as safetensor
 import tqdm
 import typing
 import yaml
 from rai_toolbox.optim import ParamTransformingOptimizer
+import accelerate
 
 def read_yaml(yaml_file):
     with open(yaml_file, 'r') as f:
@@ -64,7 +65,22 @@ def main():
 
 # Training Params
     model_checkpoint_path: str = training_config["model_checkpoint"]
+    train_batch_size : int = training_config["base"]["train_batch_size"]
+    epochs: int = training_config["base"]["epochs"]
     output_dir: str = training_config["output_dir"] 
+    enable_wand: bool = training_config["wandb"]["enable_wandb"]
+    activate_accelerate = training_config["base"]["activate_accelerate"]
+    reporter = None
+
+
+    if enable_wand:
+        reporter = "wandb"
+        wandb.login()
+
+    if activate_accelerate:
+        # Initialize Accelerator
+        accelerator = Accelerator()
+    
 
     if not model_name and not model_checkpoint_path:
         raise Exception("""Neither a hugginface Pretrained model or a Checkpoint has been specified. Please in your model configuration
@@ -97,15 +113,15 @@ def main():
     # Define training arguments
     training_args = TrainingArguments(
         output_dir=args.output_dir,
-        num_train_epochs=args.num_train_epochs,
-        per_device_train_batch_size=8,
+        num_train_epochs=epochs,
+        per_device_train_batch_size=train_batch_size,
         per_device_eval_batch_size=8,
         warmup_steps=500,
         weight_decay=0.01,
-        logging_dir='./logs',
-        logging_steps=10,
+        # logging_dir='./logs',
+        # logging_steps=10,
         push_to_hub=False,
-        report_to=""
+        report_to=reporter
     )
 
     # Initialize Trainer
@@ -118,10 +134,17 @@ def main():
         data_collator=DefaultDataCollator(),
     )
 
+
+    if activate_accelerate:
+        # Use Accelerate's prepare method
+        trainer, model, datasets["train"], datasets["validation"] = accelerator.prepare(
+    trainer, model, datasets["train"], datasets["validation"]
+)
+    
     # Train and save the model
     trainer.train()
     classification_model.save_pretrained(args.output_dir)
-    image_processor.save_pretrained(args.output_dir)
+    
 
 
 

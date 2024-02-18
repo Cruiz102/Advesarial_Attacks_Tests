@@ -1,12 +1,13 @@
 base:
  - output_dir: output_dir
  - epochs: 10
+ - train_batch_size: 1
  - weight_decay: 0.01
  - learning_rate: 0.001
  - checkpoint: "safetensor checkpoint"
  - shards: 1
  - activate_accelerate: true
- -
+ - 
 
  
 
