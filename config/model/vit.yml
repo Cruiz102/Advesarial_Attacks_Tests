@@ -1,5 +1,8 @@
 vit:
-  interpolation: true
+  positional_enconding_interpolation: true
 
 dino:
   return_attention: True
+
+
+  

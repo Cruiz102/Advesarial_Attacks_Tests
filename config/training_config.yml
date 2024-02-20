@@ -9,8 +9,6 @@ base:
  - activate_accelerate: true
  - 
 
- 
-
 
 wandb:
 - enable_wandb: True
@@ -22,3 +20,4 @@ wandb:
 
 hub:
  - push_to_hub: True
+ - hugginface_dataset: "test"
