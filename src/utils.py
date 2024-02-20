@@ -37,9 +37,32 @@ class ImageProcessingDataset(Dataset):
 
 
 
-def read_yaml(yaml_file):
-    with open(yaml_file, 'r') as f:
-        return yaml.safe_load(f)
+def read_yaml(yaml_file: str) -> Optional[Any] :
+    if not yaml_file:
+        return None
+    try:
+        with open(yaml_file, 'r') as f:
+            return yaml.safe_load(f)
+    except (FileNotFoundError, PermissionError, yaml.YAMLError) as e:
+        print(f"An error occurred: {e}")
+        return None
+
+
+def getYAMLParameter(yaml_config: Dict,field: str, key: str = None) -> Any:
+   """    Parameters:
+    - yaml_config: The YAML configuration represented as a dictionary.
+    - field: The top-level field to search within.
+    - key: The key whose value is to be retrieved.
+    """
+   if field in yaml_config:
+        field_content = yaml_config[field]
+        if isinstance(field_content, dict) and key in field_content:
+            return field_content[key]
+        elif isinstance(field_content, list):
+            for item in field_content:
+                if isinstance(item, dict) and key in item:
+                    return item[key]
+        return None
 
 
 

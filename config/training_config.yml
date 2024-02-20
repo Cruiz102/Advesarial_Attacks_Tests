@@ -4,14 +4,13 @@ base:
  - train_batch_size: 1
  - weight_decay: 0.01
  - learning_rate: 0.001
- - checkpoint: "safetensor checkpoint"
+ - model_checkpoint: "safetensor checkpoint"
  - shards: 1
  - activate_accelerate: true
- - 
 
 
 wandb:
-- enable_wandb: True
+- enable_wandb: False
 - wandb_project: "test"
 - wandb_run_name: "test"
 - loggin_steps: 1 

@@ -8,13 +8,12 @@ import wandb
 import safetensors as safetensor
 import tqdm
 import typing
+from typing import Optional, Any
 import yaml
 from rai_toolbox.optim import ParamTransformingOptimizer
 from accelerate import Accelerator
+from utils import getYAMLParameter, read_yaml
 
-def read_yaml(yaml_file):
-    with open(yaml_file, 'r') as f:
-        return yaml.safe_load(f)
 
 def save_checkpoint(model, output_dir, epoch):
     """Save model checkpoint in SafeTensor format."""
@@ -26,8 +25,8 @@ def save_checkpoint(model, output_dir, epoch):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Fine-tune a transformer model for image classification.")
-    parser.add_argument("--dataset_config", type=str, default="./config/coco_datasets.yml", help="Path to the dataset configuration file.")
-    parser.add_argument("--model_config", type=str, default="./config/models.yml", help="")
+    parser.add_argument("--dataset_config", type=str, help="Path to the dataset configuration file.")
+    parser.add_argument("--model_config", type=str, help="")
     parser.add_argument("--training_config", type=str, default="./config/training_config.yml", help="")
     args = parser.parse_args()
     return args
@@ -52,33 +51,49 @@ def main():
     model_config = read_yaml(args.model_config)
     dataset_config = read_yaml(args.dataset_config)
     training_config = read_yaml(args.training_config)
+    print(training_config)
+
+    # Defaults Values to Models and Dataset Parameters
+    hugginface_model: str = ""
+    model_name : str = ""
+    dataset_dir: str = ""
+    dataset_name: str = ""
+    class_numbers: int = ""
+    class_names: typing.List[str] = []
+    training_distribution: int = 0
+    val_distribution :int = 0
+    test_distribution: int = 0
+    reporter = None
 
 
-    # Models Params and checking    
-    hugginface_model: str = model_config["hugginface_model"]
-    model_name : str = model_config["model_name"]
+    # Models Params and checking
+    if model_config:
+        hugginface_model: str = model_config["hugginface_model"]
+        model_name : str = model_config["model_name"]
+    
 
 
     #Dataset Params
-    dataset_dir: str = dataset_config["dataset_dir"]
-    dataset_name: str = dataset_config["dataset_name"]
-    class_numbers: int = dataset_config["class_numbers"]
-    class_names: typing.List[str] = dataset_config["class_names"]
-    training_distribution: int = dataset_config["base"]["training_distri"]
-    val_distribution :int = dataset_config["base"]["val_distri"]
-    test_distribution: int = dataset_config["base"]["test_distri"]
+    if dataset_config:
+        dataset_dir: str = dataset_config["dataset_dir"]
+        dataset_name: str = dataset_config["dataset_name"]
+        class_numbers: int = dataset_config["class_numbers"]
+        class_names: typing.List[str] = dataset_config["class_names"]
+        training_distribution: int = dataset_config["base"]["training_distri"]
+        val_distribution :int = dataset_config["base"]["val_distri"]
+        test_distribution: int = dataset_config["base"]["test_distri"]
 
 
 
 # Training Params
-    model_checkpoint_path: str = training_config["model_checkpoint"]
-    train_batch_size : int = training_config["base"]["train_batch_size"]
-    epochs: int = training_config["base"]["epochs"]
-    output_dir: str = training_config["output_dir"] 
-    enable_wand: bool = training_config["wandb"]["enable_wandb"]
-    activate_accelerate = training_config["base"]["activate_accelerate"]
-    reporter = None
-    hugginface_dataset = training_config["hub"]["hugginface_dataset"]
+#  This parameters are required
+    model_checkpoint_path: str = getYAMLParameter( training_config, "base", "model_checkpoint")
+    train_batch_size : int = getYAMLParameter(training_config, "base", "train_batch_size")
+    epochs: int = getYAMLParameter(training_config,"base","epochs")
+    output_dir: str = getYAMLParameter(training_config, "output_dir") 
+    enable_wand: bool = getYAMLParameter(training_config,"wandb", "enable_wandb")
+    activate_accelerate = getYAMLParameter(training_config,"base", "activate_accelerate")
+    hugginface_dataset = getYAMLParameter(training_config, "hub", "hugginface_dataset")
 
 
     if enable_wand:
@@ -98,12 +113,12 @@ def main():
         raise Exception("""Choose either of the of the following configurations.
                      Dataset directory and hugginface_dataset has been specified. Only one should be given""")
     
-    if training_distribution + val_distribution + test_distribution!= 1:
+    if training_distribution + val_distribution + test_distribution!= 1 and model_config:
         raise Exception("""The sum of the training, validation and test distribution should be equal to 1""")
     
-
+    
     # Load the model and tokenizer
-    config = AutoConfig.from_pretrained("google/vit-base-patch16-224", num_labels=args.num_labels)
+    config = AutoConfig.from_pretrained("google/vit-base-patch16-224", num_labels=class_numbers)
     pretrained_model = AutoModel.from_pretrained("google/vit-base-patch16-224")
     classification_model = AutoModelForImageClassification.from_config("google/vit-base-patch16-224", config=config)
     image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
