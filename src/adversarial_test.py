@@ -15,7 +15,8 @@ import torch.nn as nn
 import torch
 # Read the yaml config file of the configuration of the attacks
 import tqdm
-from utils import plot_grid
+import wandb
+from utils import plot_grid, getYAMLParameter
 attacks_config = read_yaml("./configs/attacks.yaml")
 
 
@@ -35,14 +36,33 @@ def main():
     args = parse_args()
 
     # Read the yaml config file of the configuration of the attacks
+    models_dict = {} # A Dictionary to hold the order of the models to execute
     attacks_config = read_yaml("./configs/attacks.yaml")
     local_checkpoint = attacks_config["model"]["local_model_path"]
     hugginface_model = attacks_config["model"]["hugginface_model"]
+    enable_wandb = getYAMLParameter(attacks_config, "enable_wand")
+    clip_enable = getYAMLParameter(attacks_config, "embedding_models", "clip_enable")
+    embedding_dataset = getYAMLParameter(attacks_config, "embedding_models", "dataset")
+    true_embeddings = None
+
+
+    if enable_wandb:
+        wandb.login()
+
+    if clip_enable:
+        # Load CLIP model and processor
+        config = AutoConfig.from_pretrained("openai/clip-vit-base-patch32")
+        clip_model = AutoModel.from_config(config)
+
+
+
     if local_checkpoint and hugginface_model:
         raise Exception("""Choose either of the of the following configurations.
                  Local checkpoint and hugginface_model has been specified. Only one should be given""")
     if local_checkpoint:
         model = AutoModelForImageClassification()
+
+
 
     #Load the model from the checkpoint 
     model = AutoModelForImageClassification.from_pretrained(args.model_checkpoint)
