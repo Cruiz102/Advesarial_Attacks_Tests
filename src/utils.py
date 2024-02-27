@@ -65,6 +65,27 @@ def getYAMLParameter(yaml_config: Dict,field: str, key: str = None) -> Any:
         return None
 
 
+def one_hot_encode(labels, num_classes=100):
+    """
+    One-hot encode the labels.
+
+    Parameters:
+    - labels (torch.Tensor): A tensor of labels, where each label is an integer [0, num_classes-1].
+    - num_classes (int): The total number of classes.
+
+    Returns:
+    - torch.Tensor: A tensor of shape (N, num_classes) where N is the number of labels, with one-hot encoding.
+    """
+    # Create a tensor of zeros with shape (len(labels), num_classes)
+    one_hot = torch.zeros(len(labels), num_classes)
+    
+    # Use scatter_ to fill in the appropriate indices with 1
+    # labels.unsqueeze(1) creates a column vector for scatter_'s index argument
+    # scatter_(dim, index, src) -> dim is the dimension along which to index, index is the tensor of indices, src is the value to fill in
+    one_hot.scatter_(1, labels.unsqueeze(1), 1)
+    
+    return one_hot
+
 
 def get_pred(model, images, device):
     logits = model(images.to(device))

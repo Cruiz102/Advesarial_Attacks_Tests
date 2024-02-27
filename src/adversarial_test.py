@@ -16,8 +16,8 @@ import torch
 # Read the yaml config file of the configuration of the attacks
 import tqdm
 import wandb
-from logger import OnePixelLogger, CWLogger
-from utils import plot_grid, getYAMLParameter
+from logger import OnePixelLogger, CWLogger, PGDLogger
+from utils import plot_grid, getYAMLParameter, one_hot_encode
 attacks_config = read_yaml("./configs/attacks.yaml")
 
 
@@ -49,8 +49,17 @@ def main():
     dataset = load_dataset(hugginface_dataset_dir) 
     sample_dataset_number = getYAMLParameter(attacks_config, "dataset", "sample_number")
     dataset.shuffle(seed=42)
+
+    # TODO: RAM comsuption on ImageNet Data is way to costly we need to either 
+    #  Delete the previous dataset or select an extract of that data.
     images = dataset["train"]['image']
     label = dataset["train"]["labels"]
+
+
+    if isinstance(label[0], int):
+    # Converting Labels to their one hot encoded representation
+        one_hot_encode(label, num_classes=len(dataset.features["label"].names))
+
 
 
     if enable_wandb:
@@ -114,7 +123,7 @@ def main():
         cw_attack = CWLogger(model=model, steps=steps_cw, kappa=kappa_cw)
 
     if enable_PGD:
-        pgd_attack = ta.PGD(model, steps=steps_pgd)
+        pgd_attack = PGDLogger(model, steps=steps_pgd)
 
 
 
@@ -124,17 +133,18 @@ def main():
 
 def test_attack(images: torch.Tensor, labels: torch.Tensor,model: nn.Module, device: str, output_dir: str, targeted: bool, *attacks):
     print("Initializing Training of Attacks")
+
     for attack in attacks:
         if type(attack) == nn.Module:
             print(f"Testing {attack.__class__.__name__}...")
             for image, label in tqdm(zip(images, labels), total=len(images)):
                 # Assuming the attack model has a method named `run` to execute the attack
-                attack(model,image, label, device=device, targeted=targeted)
+                adv_images = attack(model,image, label, device=device, targeted=targeted)
         else:
             print(f"Skipping invalid attack model: {type(attack)}")
 
     # Additional code to plot or save the results can be added here
-
+            
 
 if __name__ == "__main__":
     main()
