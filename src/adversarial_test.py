@@ -16,6 +16,7 @@ import torch
 # Read the yaml config file of the configuration of the attacks
 import tqdm
 import wandb
+from logger import OnePixelLogger, CWLogger
 from utils import plot_grid, getYAMLParameter
 attacks_config = read_yaml("./configs/attacks.yaml")
 
@@ -44,6 +45,12 @@ def main():
     clip_enable = getYAMLParameter(attacks_config, "embedding_models", "clip_enable")
     embedding_dataset = getYAMLParameter(attacks_config, "embedding_models", "dataset")
     true_embeddings = None
+    hugginface_dataset_dir = getYAMLParameter(attacks_config, "dataset", "dataset_path")
+    dataset = load_dataset(hugginface_dataset_dir) 
+    sample_dataset_number = getYAMLParameter(attacks_config, "dataset", "sample_number")
+    dataset.shuffle(seed=42)
+    images = dataset["train"]['image']
+    label = dataset["train"]["labels"]
 
 
     if enable_wandb:
@@ -66,7 +73,15 @@ def main():
 
     #Load the model from the checkpoint 
     model = AutoModelForImageClassification.from_pretrained(args.model_checkpoint)
-    image_processor = ta.utils.ImageProcessor(model=model, device="cuda")
+    # image_processor = ta.utils.ImageProcessor(model=model, device="cuda")
+
+
+    if getYAMLParameter(attacks_config, "dataset", "train_on_dataset"):
+        # Run the model and get the labels
+        model.eval()
+        # Get predictions on clean images
+        label = model(images[:sample_dataset_number])
+
 
 
     # Attacks Base Configurations
@@ -91,66 +106,34 @@ def main():
     enable_PGD = attacks_config["PGD"]["enable_attack"]
     steps_pgd = attacks_config["PGD"]["steps"]
 
-    if attacks_config["dataset"]["train_on_dataset"]:
-        dataset = load_dataset(args.dataset_config) 
-        images =dataset["validation"]["image"]
-        labels = dataset["validation"]["label"]
-
 
     if enable_one_pixel_attack:
-        one_pixel_attack = ta.OnePixel(model= model,pixels= num_pixels, steps= onepixel_steps, popsize= population)
+        one_pixel_attack = OnePixelLogger(model, num_pixels, onepixel_steps, population)
 
     if enable_cw:
-        cw_attack = ta.CW(model=model, steps=steps_cw)
+        cw_attack = CWLogger(model=model, steps=steps_cw, kappa=kappa_cw)
 
     if enable_PGD:
         pgd_attack = ta.PGD(model, steps=steps_pgd)
 
 
 
-# this method if specified shoudexecute a plotting  of the results of the attacks
-def test_attack_individually(attacker: ta.Attack, model: nn.Module, images: torch.Tensor, labels: torch.Tensor, device: str, output_dir: str, targeted: bool):
-    """
-    Test the given attack on the given model using tqdm for progress display.
-    """
-    
-    model.eval()
-    attacker.set_mode_default()
-    
-    # Assuming 'images' is a batch of images, you might want to iterate over them
-    # If 'images' is already a batch and you process it all at once, adapt accordingly
-    
-    # Initialize statistics
-    success_count = 0
-    total_count = len(images)
-    
-    # Prepare a progress bar
-    pbar = tqdm(total=total_count, desc='Testing Attack')
-    
-    for i in range(total_count):
-        img, label = images[i:i+1].to(device), labels[i:i+1].to(device) # Process one image at a time
-        if targeted:
-            attacker.set_mode_targeted_by_label()
-        adv_images = attacker(img, label)
-        
-        # Example of a simple check: See if the model's prediction changes
-        with torch.no_grad():
-            original_pred = model(img).max(1)[1] # Get the index of the max log-probability
-            adv_pred = model(adv_images).max(1)[1]
-            if original_pred != adv_pred:
-                success_count += 1
-        
-        pbar.update(1)
-        plot_grid(adv_images)
-        plot_grid(original_pred)    
-    pbar.close()
-    
-    # Print or log the success rate
-    success_rate = success_count / total_count * 100
-    print(f"Attack Success Rate: {success_rate:.2f}%")
-    
+    test_attack(one_pixel_attack, cw_attack, pgd_attack, images, labels= label, device="cuda", output_dir="./results", targeted=targeted)
 
 
+
+def test_attack(images: torch.Tensor, labels: torch.Tensor,model: nn.Module, device: str, output_dir: str, targeted: bool, *attacks):
+    print("Initializing Training of Attacks")
+    for attack in attacks:
+        if type(attack) == nn.Module:
+            print(f"Testing {attack.__class__.__name__}...")
+            for image, label in tqdm(zip(images, labels), total=len(images)):
+                # Assuming the attack model has a method named `run` to execute the attack
+                attack(model,image, label, device=device, targeted=targeted)
+        else:
+            print(f"Skipping invalid attack model: {type(attack)}")
+
+    # Additional code to plot or save the results can be added here
 
 
 if __name__ == "__main__":

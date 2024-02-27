@@ -10,12 +10,16 @@ model:
   enable_resize: True
   resize_size: 224
 
+dataset:
+  train_on_dataset: True # If train on dataset is true it will use the true labels from the dataset. If it is set to False
+                         # it will run the model with the images and generate pseudo labels to use for training.
+  dataset_path: "imagenet-1k"
+  sample_number: 100  # Number of samples to use from the dataset
 
 
 
 embedding_models:
   clip_model_enable : True
-  image_sample_dataset: "path/to/dataset"
   # Coco dataset labels
   sample_text_data : ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
          'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
@@ -28,21 +32,15 @@ embedding_models:
          'hair drier', 'toothbrush']
 
 
-
 attack:
-  targeted: True
+  targeted: False
   target_list: [(),()] 
   
-   
-dataset:
-  train_on_dataset: True
-  dataset_name: true
-  dataset_path: "path"
   
 
 one_pixel:
   enable_attack: True
-  steps: 10
+  steps: 1000
   pixels : 1
   population_size: 100
 
@@ -51,14 +49,14 @@ one_pixel:
 
 
 carlini_weiner:
-  enable_attack: True
+  enable_attack: False
   kappa: 0.01
   steps: 10000 
   load_attack: "path"
 
 
 PGD:
-  enable_attack: True
+  enable_attack: False
   steps: 10000
   load_attack: "path"
 

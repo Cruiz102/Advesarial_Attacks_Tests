@@ -9,3 +9,4 @@ wandb
 rai-toolbox
 accelerate
 deepspeed
+huggingface_hub
