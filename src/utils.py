@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import json
 import os
 import torch
+import torch.nn as nn 
+import math
 import torchvision
 import torchvision.transforms as transforms
 import yaml
@@ -35,10 +37,26 @@ class ImageProcessingDataset(Dataset):
         
         return batch
 
+class HugginfaceProcessorData(Dataset):
+    def __init__(self, processed_dataset):
+        self.dataset = processed_dataset
 
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        # Assuming processed_dataset is indexed like a list or dict
+        item = self.dataset[idx]
+        # Convert item to the desired format if necessary
+        return {
+            "pixel_values": item["pixel_values"],
+            "labels": item["labels"],
+            'image': item['image']    # Include other relevant fields
+        }
 
 def read_yaml(yaml_file: str) -> Optional[Any] :
     if not yaml_file:
+        print("No YAML file provided or file not found.")
         return None
     try:
         with open(yaml_file, 'r') as f:
@@ -142,8 +160,28 @@ def save_grid_images(images, rows, cols, experiment_name, output_dir='outputs'):
     plt.savefig(grid_path)
     print(f"Saved grid images to {grid_path}")
 
+# Code fro the robustbench utils 
+# https://github.com/RobustBench/robustbench/blob/master/robustbench/utils.py
+def clean_accuracy(model: nn.Module,
+                   x: torch.Tensor,
+                   y: torch.Tensor,
+                   batch_size: int = 100,
+                   device: torch.device = None):
+    if device is None:
+        device = x.device
+    acc = 0.
+    n_batches = math.ceil(x.shape[0] / batch_size)
+    with torch.no_grad():
+        for counter in range(n_batches):
+            x_curr = x[counter * batch_size:(counter + 1) *
+                       batch_size].to(device)
+            y_curr = y[counter * batch_size:(counter + 1) *
+                       batch_size].to(device)
 
+            output = model(x_curr)
+            acc += (output.max(1)[1] == y_curr).float().sum()
 
+    return acc.item() / x.shape[0]
 def embeddings_interpolation(pixel_value):
     """This function should use the patch interpolation
         for all VIT based models as a extra parameter.

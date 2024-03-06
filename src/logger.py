@@ -4,7 +4,7 @@ import wandb
 import torch
 import torch.nn as nn
 import torch.optim
-import numpy
+import numpy as np
 from  transformers.modeling_outputs import ImageClassifierOutput
 #  The goal in here will be to implement the loops of the attacks
 #  with tqdm and wandb.
@@ -14,6 +14,20 @@ class OnePixelLogger(ta.OnePixel):
         # Forward arguments to the Parent class
         super().__init__(*args, **kwargs)
     # Wrap the attack call with tqdm for a progress bar
+        
+    def _get_prob(self, images):
+        with torch.no_grad():
+            batches = torch.split(images, self.inf_batch)
+            outs = []
+            for batch in batches:
+                out = self.get_logits(batch)
+                if isinstance(out, ImageClassifierOutput):
+                    out = out.logits
+                outs.append(out)
+        outs = torch.cat(outs)
+        prob = F.softmax(outs, dim=1)
+        return prob.detach().cpu().numpy()
+
 
     def forward(self, images, labels):
         # Initialize wandb run
@@ -163,49 +177,49 @@ class CWLogger(ta.CW):
     
 
 
-    class PGDLogger(ta.PGD):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
+class PGDLogger(ta.PGD):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-        def forward(self, images, labels):
-                r"""
-                Overridden.
-                """
+    def forward(self, images, labels):
+            r"""
+            Overridden.
+            """
 
-                images = images.clone().detach().to(self.device)
-                labels = labels.clone().detach().to(self.device)
+            images = images.clone().detach().to(self.device)
+            labels = labels.clone().detach().to(self.device)
 
+            if self.targeted:
+                target_labels = self.get_target_label(images, labels)
+
+            loss = nn.CrossEntropyLoss()
+            adv_images = images.clone().detach()
+
+            if self.random_start:
+                # Starting at a uniformly random point
+                adv_images = adv_images + torch.empty_like(adv_images).uniform_(
+                    -self.eps, self.eps
+                )
+                adv_images = torch.clamp(adv_images, min=0, max=1).detach()
+
+            for _ in range(self.steps):
+                adv_images.requires_grad = True
+                outputs = self.get_logits(adv_images)
+                if type(outputs) == ImageClassifierOutput:
+                    outputs = outputs.logits
+                # Calculate loss
                 if self.targeted:
-                    target_labels = self.get_target_label(images, labels)
+                    cost = -loss(outputs, target_labels)
+                else:
+                    cost = loss(outputs, labels)
 
-                loss = nn.CrossEntropyLoss()
-                adv_images = images.clone().detach()
+                # Update adversarial images
+                grad = torch.autograd.grad(
+                    cost, adv_images, retain_graph=False, create_graph=False
+                )[0]
 
-                if self.random_start:
-                    # Starting at a uniformly random point
-                    adv_images = adv_images + torch.empty_like(adv_images).uniform_(
-                        -self.eps, self.eps
-                    )
-                    adv_images = torch.clamp(adv_images, min=0, max=1).detach()
+                adv_images = adv_images.detach() + self.alpha * grad.sign()
+                delta = torch.clamp(adv_images - images, min=-self.eps, max=self.eps)
+                adv_images = torch.clamp(images + delta, min=0, max=1).detach()
 
-                for _ in range(self.steps):
-                    adv_images.requires_grad = True
-                    outputs = self.get_logits(adv_images)
-                    if type(outputs) == ImageClassifierOutput:
-                        outputs = outputs.logits
-                    # Calculate loss
-                    if self.targeted:
-                        cost = -loss(outputs, target_labels)
-                    else:
-                        cost = loss(outputs, labels)
-
-                    # Update adversarial images
-                    grad = torch.autograd.grad(
-                        cost, adv_images, retain_graph=False, create_graph=False
-                    )[0]
-
-                    adv_images = adv_images.detach() + self.alpha * grad.sign()
-                    delta = torch.clamp(adv_images - images, min=-self.eps, max=self.eps)
-                    adv_images = torch.clamp(images + delta, min=0, max=1).detach()
-
-                return adv_images
+            return adv_images

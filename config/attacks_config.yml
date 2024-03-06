@@ -3,8 +3,8 @@ enable_wandb: True
 
 model:
   name: 'ResNet18' 
-  hugginface_model: "hugginface"
-  local_model_path: "jfasldjflj"
+  hugginface_model: "google/vit-base-patch16-224"
+  local_model_path: ""
   use_preprocessor: True
   local_preprocessor: "path"
   enable_resize: True
@@ -13,8 +13,8 @@ model:
 dataset:
   train_on_dataset: True # If train on dataset is true it will use the true labels from the dataset. If it is set to False
                          # it will run the model with the images and generate pseudo labels to use for training.
-  dataset_path: "imagenet-1k"
-  sample_number: 100  # Number of samples to use from the dataset
+  dataset_path: "mrm8488/ImageNet1K-val"
+  sample_number: 20  # Number of samples to use from the dataset for the evaluation
 
 
 
