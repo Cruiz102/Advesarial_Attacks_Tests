@@ -48,10 +48,12 @@ class HugginfaceProcessorData(Dataset):
         # Assuming processed_dataset is indexed like a list or dict
         item = self.dataset[idx]
         # Convert item to the desired format if necessary
+        # e.g. convert a PIL image to a tensor
+
         return {
             "pixel_values": item["pixel_values"],
-            "labels": item["labels"],
-            'image': item['image']    # Include other relevant fields
+            "label": item["label"],
+            # 'image': item['image']    # Include other relevant fields
         }
 
 def read_yaml(yaml_file: str) -> Optional[Any] :
@@ -182,6 +184,22 @@ def clean_accuracy(model: nn.Module,
             acc += (output.max(1)[1] == y_curr).float().sum()
 
     return acc.item() / x.shape[0]
+
+
+def generate_csv_data(output_dir):
+    #  A function that calculates the the clean accuracy for each model of a dataset given a model
+    clean_accuracy(model, x_test, y_test)
+    with open(os.path.join(output_dir, 'clean_accuracy.csv'), 'w') as f:
+        f.write('model_name,clean_accuracy\n')
+        for model_name, model in models.items():
+            clean_acc = clean_accuracy(model, x_test, y_test)
+            f.write(f'{model_name},{clean_acc}\n')
+
+
+def confussion_matrix(model, x, y, device, batch_size=100):
+    #  plot a confussion matrix
+
+    pass
 def embeddings_interpolation(pixel_value):
     """This function should use the patch interpolation
         for all VIT based models as a extra parameter.

@@ -1,5 +1,8 @@
 from tqdm import tqdm
 import torchattacks as ta
+import math
+import torchvision.utils as vutils
+import torch.nn.functional as F
 import wandb
 import torch
 import torch.nn as nn
@@ -10,9 +13,12 @@ from  transformers.modeling_outputs import ImageClassifierOutput
 #  with tqdm and wandb.
 
 class OnePixelLogger(ta.OnePixel):
-    def __init__(self, *args, **kwargs):
+    def __init__(self,project_name,wandb_config=None, *args, **kwargs):
         # Forward arguments to the Parent class
         super().__init__(*args, **kwargs)
+        self.image_counter = 0
+        self.project_name = project_name
+        self.wandb_config = wandb_config
     # Wrap the attack call with tqdm for a progress bar
         
     def _get_prob(self, images):
@@ -31,10 +37,18 @@ class OnePixelLogger(ta.OnePixel):
 
     def forward(self, images, labels):
         # Initialize wandb run
-        wandb.init(project="your_project_name", entity="your_wandb_entity")
+        wandb.init(project=self.project_name,
+                   name=f"image_{self.image_counter}",
+                   config = self.wandb_config)
+        print(f"Image Counter: {self.image_counter}", type(self.image_counter))
+        self.image_counter += 1
 
         images = images.clone().detach().to(self.device)
         labels = labels.clone().detach().to(self.device)
+        q = images.numpy()
+
+        input_grid = vutils.make_grid(images, nrow=int(math.sqrt(images.size(0))), padding=2, normalize=True)
+        wandb.log({f"Input Images_batch_{self.image_counter}": wandb.Image(input_grid.numpy(), caption="Input Batch")})
 
         if self.targeted:
             target_labels = self.get_target_label(images, labels)
@@ -87,11 +101,14 @@ class OnePixelLogger(ta.OnePixel):
             adv_images.append(adv_image)
 
         adv_images = torch.cat(adv_images)
+
+        input_grid = vutils.make_grid(adv_images, nrow=int(math.sqrt(images.size(0))), padding=2, normalize=True)
         
         # Optionally log the final output as an artifact, if useful
-        # wandb.log({"Final Adversarial Images": wandb.Image(adv_images)})
+        wandb.log({"Final Adversarial Images": wandb.Image(adv_images.to_numpy(), caption="Final Adversarial Images")})
         
-        # Finish the wandb run
+    
+
         wandb.finish()
 
         return adv_images

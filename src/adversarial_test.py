@@ -20,9 +20,6 @@ import wandb
 import math
 from logger import OnePixelLogger, CWLogger, PGDLogger
 from utils import plot_grid, getYAMLParameter, one_hot_encode
-attacks_config = read_yaml("./configs/attacks.yaml")
-
-
 
 
 
@@ -43,6 +40,7 @@ def main():
     attacks_config = read_yaml("config/attacks_config.yml")
     local_checkpoint = getYAMLParameter(attacks_config, "model", "local_model_path")
     hugginface_model = getYAMLParameter(attacks_config, "model", "hugginface_model")
+    use_preprocessor = getYAMLParameter(attacks_config, "model", "use_preprocessor")
     enable_wandb = getYAMLParameter(attacks_config, "enable_wand")
     clip_enable = getYAMLParameter(attacks_config, "embedding_models", "clip_enable")
     embedding_dataset = getYAMLParameter(attacks_config, "embedding_models", "dataset")
@@ -93,26 +91,7 @@ def main():
         return processed
 
     # Apply preprocessing
-    processed_dataset = dataset.map(preprocess_images, batched=True)
-
-    # Access and type-check the first element's pixel values
-    a = processed_dataset[0]
-    print(type(a['pixel_values'])) 
-    ds = processed_dataset.with_format("torch")
-    ds = ds[0]
-    # image_processo = ta.utils.ImageProcessor(model=model, device="cuda")
-
-
-    # if getYAMLParameter(attacks_config, "dataset", "train_on_dataset"):
-    #     # Run the model and get the labels
-    #     model.eval()
-    #     # Get predictions on clean images
-    #     label = model(images[:sample_dataset_number])
-
-
-    # Format the Data into the processors for changing the dataset to the format 
-    # for the Hugginface Model.
-
+    processed_dataset = dataset.map(preprocess_images, batched=True, remove_columns=["image"]).with_format("torch")
 
 
     # Attacks Base Configurations
@@ -139,7 +118,7 @@ def main():
     steps_pgd = getYAMLParameter(attacks_config, "PGD", "steps")
 
     if enable_one_pixel_attack:
-        one_pixel_attack = OnePixelLogger(model, num_pixels, onepixel_steps, population)
+        one_pixel_attack = OnePixelLogger("OnePixelAttack",{},model, num_pixels, onepixel_steps, population)
 
     if enable_cw:
         cw_attack = CWLogger(model=model, steps=steps_cw, kappa=kappa_cw)
@@ -149,11 +128,33 @@ def main():
 
 
     dataset = HugginfaceProcessorData(dataset)
-    test_attack( one_pixel = one_pixel_attack, cw = cw_attack,pgd =  pgd_attack,dataset=dataset, device="cuda", output_dir="./results" )
+
+    if use_preprocessor: 
+        processed_dataset = HugginfaceProcessorData(processed_dataset)
+        test_attack(
+        dataset=processed_dataset, 
+        batch_size=200, 
+        device="cuda", 
+        output_dir="./results", 
+        targeted=targeted,
+        attacks=[one_pixel_attack]
+    )
+    else:
+        pass
+    #     test_attack(
+    #     dataset=dataset,
+    #     batch_size=200,
+    #     device="cuda",
+    #     output_dir="./results",
+    #     targeted=targeted,
+    #     attacks=[one_pixel_attack]
+    # )
 
 
 
-def test_attack(dataset, batch_size, device: str, output_dir: str, targeted: bool, *attacks):
+
+
+def test_attack(dataset, batch_size, device: str, output_dir: str, targeted: bool, attacks = []):
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     total_batches = len(dataloader)
     save_interval = max(1, math.ceil(total_batches / 10))  # Ensure at least 1 to avoid division by zero
@@ -162,8 +163,9 @@ def test_attack(dataset, batch_size, device: str, output_dir: str, targeted: boo
     for attack in attacks:
         print("Attack Name: ", attack)
         batch_counter = 0
-        for batch in tqdm(dataloader):
-            adv_images = attack(batch["pixel_values"].to(device), batch["labels"].to(device), device=device, targeted=targeted)
+        for batch in dataloader:
+            print("Batch: ", batch["pixel_values"].shape)
+            adv_images = attack(batch["pixel_values"], batch["label"])
             
             # Check if it's time to save grid images
             if batch_counter % save_interval == 0:
