@@ -7,19 +7,17 @@
 
 import matplotlib.pyplot as plt
 from transformers import AutoModelForImageClassification, AutoConfig, TrainingArguments, Trainer, AutoModel, AutoImageProcessor
-import torchattacks as ta
 from utils import read_yaml, getYAMLParameter, HugginfaceProcessorData
-import argparse 
 from datasets import load_dataset
-import torch.nn as nn
-import torch
 from torch.utils.data import DataLoader
-# Read the yaml config file of the configuration of the attacks
+from logger import OnePixelLogger, CWLogger, PGDLogger
+from utils import plot_grid, getYAMLParameter, one_hot_encode
 import tqdm
 import wandb
 import math
-from logger import OnePixelLogger, CWLogger, PGDLogger
-from utils import plot_grid, getYAMLParameter, one_hot_encode
+import argparse 
+import torch
+import torch.nn as nn
 
 
 
@@ -55,12 +53,12 @@ def main():
     if sample_dataset_number:
         dataset = dataset['train'].select(range(sample_dataset_number))
 
-    # if isinstance(label[0], int):
-    # # Converting Labels to their one hot encoded representation
-    #     one_hot_encode(label, num_classes=len(dataset.features["label"].names))
+    # Check if the dataset has a "label" column
+    if "label" in dataset.features.keys():
+        # Get the labels and their corresponding names
+        labels = dataset.features["label"].names
 
-
-
+    
     if enable_wandb:
         wandb.login()
 
@@ -85,13 +83,15 @@ def main():
 
     def preprocess_images(examples):
         # Process the images
-        processed = image_processor(images=examples["image"], return_tensors="pt")
-        # Ensure pixel_values are tensors (this should already be the case)
-        processed["pixel_values"] = torch.tensor(processed["pixel_values"])
-        return processed
+        examples["pixel_values"] = image_processor(images=examples["image"], return_tensors="pt")["pixel_values"]
+        examples["label"] = one_hot_encode(examples["label"], num_classes=len(labels))
+        return examples
 
     # Apply preprocessing
     processed_dataset = dataset.map(preprocess_images, batched=True, remove_columns=["image"]).with_format("torch")
+    # if isinstance([0], int):
+    # # Converting Labels to their one hot encoded representation
+    #     one_hot_encode(processed_dataset[], num_classes=len(processed_dataset.features["label"].names))
 
 
     # Attacks Base Configurations
@@ -106,12 +106,9 @@ def main():
 
 
     #  Carlini Weiner Parameters
-
     enable_cw = getYAMLParameter(attacks_config, "carlini_wiener", "enable_attack")
     steps_cw = getYAMLParameter(attacks_config, "carlini_wiener", "steps")
     kappa_cw = getYAMLParameter(attacks_config, "carlini_wiener", "kappa")
-
-
 
     # PGD Parameters
     enable_PGD = getYAMLParameter(attacks_config, "PGD", "enable_attack")
@@ -128,6 +125,7 @@ def main():
 
 
     dataset = HugginfaceProcessorData(dataset)
+    
 
     if use_preprocessor: 
         processed_dataset = HugginfaceProcessorData(processed_dataset)

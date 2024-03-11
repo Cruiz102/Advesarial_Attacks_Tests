@@ -85,7 +85,7 @@ def getYAMLParameter(yaml_config: Dict,field: str, key: str = None) -> Any:
         return None
 
 
-def one_hot_encode(labels, num_classes=100):
+def one_hot_encode(labels, num_classes=100) -> torch.tensor:
     """
     One-hot encode the labels.
 
@@ -97,6 +97,7 @@ def one_hot_encode(labels, num_classes=100):
     - torch.Tensor: A tensor of shape (N, num_classes) where N is the number of labels, with one-hot encoding.
     """
     # Create a tensor of zeros with shape (len(labels), num_classes)
+    labels = torch.tensor(labels)
     one_hot = torch.zeros(len(labels), num_classes)
     
     # Use scatter_ to fill in the appropriate indices with 1

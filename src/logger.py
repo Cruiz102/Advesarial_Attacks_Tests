@@ -6,9 +6,11 @@ import torch.nn.functional as F
 import wandb
 import torch
 import torch.nn as nn
-import torch.optim
+import torch.optim.optimizer as optim
 import numpy as np
 from  transformers.modeling_outputs import ImageClassifierOutput
+from differential_evolution import differential_evolution
+
 #  The goal in here will be to implement the loops of the attacks
 #  with tqdm and wandb.
 
@@ -45,9 +47,11 @@ class OnePixelLogger(ta.OnePixel):
 
         images = images.clone().detach().to(self.device)
         labels = labels.clone().detach().to(self.device)
-        q = images.numpy()
 
-        input_grid = vutils.make_grid(images, nrow=int(math.sqrt(images.size(0))), padding=2, normalize=True)
+        input_grid = vutils.make_grid(images, nrow=int(math.sqrt(images.size(0))), normalize=True)
+        # Wandb have an issue having the number of channels on the first parameter of the shape
+        # we need to permute it.
+        input_grid = input_grid.permute(1, 2, 0)
         wandb.log({f"Input Images_batch_{self.image_counter}": wandb.Image(input_grid.numpy(), caption="Input Batch")})
 
         if self.targeted:
@@ -85,7 +89,7 @@ class OnePixelLogger(ta.OnePixel):
                     wandb.log({"Attack Success": success, "Convergence": convergence})
                     return success
 
-            delta = ta.differential_evolution(
+            delta = differential_evolution(
                 func=func,
                 bounds=bounds,
                 callback=callback,
@@ -102,7 +106,8 @@ class OnePixelLogger(ta.OnePixel):
 
         adv_images = torch.cat(adv_images)
 
-        input_grid = vutils.make_grid(adv_images, nrow=int(math.sqrt(images.size(0))), padding=2, normalize=True)
+        input_grid = vutils.make_grid(adv_images, nrow=int(math.sqrt(images.size(0))), normalize=True)
+        input_grid = input_grid.permute(1, 2, 0)
         
         # Optionally log the final output as an artifact, if useful
         wandb.log({"Final Adversarial Images": wandb.Image(adv_images.to_numpy(), caption="Final Adversarial Images")})
