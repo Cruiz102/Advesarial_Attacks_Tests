@@ -1,5 +1,6 @@
 from tqdm import tqdm
 import torchattacks as ta
+from torchattacks.attacks._differential_evolution import differential_evolution
 import math
 import torchvision.utils as vutils
 import torch.nn.functional as F
@@ -9,7 +10,8 @@ import torch.nn as nn
 import torch.optim.optimizer as optim
 import numpy as np
 from  transformers.modeling_outputs import ImageClassifierOutput
-from differential_evolution import differential_evolution
+
+from utils import clean_accuracy
 
 #  The goal in here will be to implement the loops of the attacks
 #  with tqdm and wandb.
@@ -19,6 +21,7 @@ class OnePixelLogger(ta.OnePixel):
         # Forward arguments to the Parent class
         super().__init__(*args, **kwargs)
         self.image_counter = 0
+        self.attack_success_counter = 0
         self.project_name = project_name
         self.wandb_config = wandb_config
     # Wrap the attack call with tqdm for a progress bar
@@ -76,7 +79,9 @@ class OnePixelLogger(ta.OnePixel):
 
                 def callback(delta, convergence):
                     success = self._attack_success(image, target_label, delta)
-                    wandb.log({"Attack Success": success, "Convergence": convergence})
+                    if success: 
+                        self.attack_success_counter += 1
+                    wandb.log({"Attack Success": self.attack_success_counter, "Convergence": convergence})
                     return success
 
             else:
@@ -106,11 +111,14 @@ class OnePixelLogger(ta.OnePixel):
 
         adv_images = torch.cat(adv_images)
 
-        input_grid = vutils.make_grid(adv_images, nrow=int(math.sqrt(images.size(0))), normalize=True)
-        input_grid = input_grid.permute(1, 2, 0)
+        adv_grid = vutils.make_grid(adv_images, nrow=int(math.sqrt(images.size(0))), normalize=True)
+        adv_grid = adv_grid.permute(1, 2, 0)
+        print(input_grid.shape)
         
         # Optionally log the final output as an artifact, if useful
-        wandb.log({"Final Adversarial Images": wandb.Image(adv_images.to_numpy(), caption="Final Adversarial Images")})
+        wandb.log({"Final Adversarial Images": wandb.Image(adv_grid.numpy(), caption="Final Adversarial Images")})
+
+        # batched_accuracy = 
         
     
 

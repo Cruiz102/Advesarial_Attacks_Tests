@@ -84,7 +84,7 @@ def main():
     def preprocess_images(examples):
         # Process the images
         examples["pixel_values"] = image_processor(images=examples["image"], return_tensors="pt")["pixel_values"]
-        examples["label"] = one_hot_encode(examples["label"], num_classes=len(labels))
+        # examples["label"] = one_hot_encode(examples["label"], num_classes=len(labels))    
         return examples
 
     # Apply preprocessing
@@ -113,9 +113,21 @@ def main():
     # PGD Parameters
     enable_PGD = getYAMLParameter(attacks_config, "PGD", "enable_attack")
     steps_pgd = getYAMLParameter(attacks_config, "PGD", "steps")
+        
+    # model = DenseModel(224*224*3,300,500,1000)
+
+    wandb_config = {
+        "targeted": targeted,
+        "targeted_labels": targeted_labels,
+        "population": population,
+        "steps": onepixel_steps,
+        "num_pixels": num_pixels,
+        "attack": "one_pixel"
+    }
+
 
     if enable_one_pixel_attack:
-        one_pixel_attack = OnePixelLogger("OnePixelAttack",{},model, num_pixels, onepixel_steps, population)
+        one_pixel_attack = OnePixelLogger("OnePixelAttack",wandb_config,model, num_pixels, onepixel_steps, population)
 
     if enable_cw:
         cw_attack = CWLogger(model=model, steps=steps_cw, kappa=kappa_cw)
@@ -167,8 +179,7 @@ def test_attack(dataset, batch_size, device: str, output_dir: str, targeted: boo
             
             # Check if it's time to save grid images
             if batch_counter % save_interval == 0:
-                # Add your code to select or prepare images, rows, cols, and experiment_name for save_grid_images
-                save_grid_images(adv_images, rows, cols, experiment_name, output_dir=output_dir)
+                pass
             
             batch_counter += 1
 

@@ -6,7 +6,7 @@ model:
   hugginface_model: "google/vit-base-patch16-224"
   local_model_path: ""
   use_preprocessor: True
-  local_preprocessor: "path"
+  local_preprocessor: ""
   enable_resize: True
   resize_size: 224
 
@@ -30,7 +30,7 @@ attack:
 
 one_pixel:
   enable_attack: True
-  steps: 1000
+  steps: 10
   pixels : 1
   population_size: 100
 
