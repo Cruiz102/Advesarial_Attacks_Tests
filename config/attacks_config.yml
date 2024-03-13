@@ -2,7 +2,7 @@
 enable_wandb: True
 
 model:
-  name: 'ResNet18' 
+  name: 'ResNet18' #the Name you want to give to the model
   hugginface_model: "google/vit-base-patch16-224"
   local_model_path: ""
   use_preprocessor: True

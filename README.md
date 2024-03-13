@@ -36,4 +36,73 @@ Exporting TensorRT engine.
 For exporting a trt model and use it in the live_inference script you first must ensure that you  have CUDA and tensorRT installed in your machine.
 
 # Getting Started:
-Not yet ready for this.
+ To run this repository you will need first to install python and their dependencies.
+
+ 1. Clone the repository
+ 2. Install the dependencies using pip3 install -r requirements.txt
+  
+```bash
+git clone https://github.com/Cruiz102/Advesarial_Attacks_Tests.git
+
+cd Advesarial_Attacks_Tests
+
+pip3 install -r requirements.txt
+
+```
+
+## Testing Adversarial Attacks
+(Disclaimer it could still have some issues. SORRY. Im going to fix the bugs and problems soon :))
+
+For now if you want to see the results of running the adversarial attacks you will need to use Weight and Biases and and sign up with your account.
+
+For accessing weight and biases and create an account you can click on the following link: [Weight and biases](https://wandb.ai/site)
+
+Once you create an account you can log into it by running the following command(make sure to install the libraries first!!):
+
+```bash
+wandb login
+```
+
+after loging into your account you are ready to run your first attack.
+
+For running an attack you will have to create a configuration file that will have the following structure. Remember to enable wandb for logging the results.
+
+```yaml
+enable_wandb: True
+
+model:
+  name: 'VIT_model' 
+  hugginface_model: "google/vit-base-patch16-224"
+  use_preprocessor: True
+  resize_size: 224
+
+dataset:
+  train_on_dataset: True # If train on dataset is true it will use the true labels from the dataset. If it is set to False
+                         # it will run the model with the images and generate pseudo labels to use for training.
+  dataset_path: "mrm8488/ImageNet1K-val"
+  sample_number: 20  # Number of samples to use from the dataset for the evaluation
+
+
+attack:
+  targeted: False
+  target_list: [(),()] 
+  
+  
+
+one_pixel:
+  enable_attack: True
+  steps: 10
+  pixels : 1
+  population_size: 100
+```
+
+
+After configuring your yaml file with the models, dataset and hyperparameters you want to use  the next step is to run the script for runnning the attacks.
+
+
+```bash
+python3 attack_test.py --config_path=config.yaml
+```
+
+
+Congratulations you are now running your first attack, you will see in you terminal how the attack is being trained. After finishing the attack you will see the results in your wandb account.
