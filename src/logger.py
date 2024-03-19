@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.optim.optimizer as optim
 import numpy as np
 from  transformers.modeling_outputs import ImageClassifierOutput
-
+from typing import Tuple
 from utils import clean_accuracy
 
 #  The goal in here will be to implement the loops of the attacks
@@ -40,7 +40,7 @@ class OnePixelLogger(ta.OnePixel):
         return prob.detach().cpu().numpy()
 
 
-    def forward(self, images, labels):
+    def forward(self, images, labels) -> Tuple[torch.Tensor, int, int]:
         # Initialize wandb run
         wandb.init(project=self.project_name,
                    name=f"image_{self.image_counter}",
@@ -91,7 +91,9 @@ class OnePixelLogger(ta.OnePixel):
 
                 def callback(delta, convergence):
                     success = self._attack_success(image, label, delta)
-                    wandb.log({"Attack Success": success, "Convergence": convergence})
+                    if success: 
+                        self.attack_success_counter += 1
+                    wandb.log({"Attack Success": self.attack_success_counter, "Convergence": convergence})
                     return success
 
             delta = differential_evolution(
@@ -117,14 +119,19 @@ class OnePixelLogger(ta.OnePixel):
         
         # Optionally log the final output as an artifact, if useful
         wandb.log({"Final Adversarial Images": wandb.Image(adv_grid.numpy(), caption="Final Adversarial Images")})
+#  Get the label from batched prediction with the hisgtest probability
+        batched_predictions = self.model(adv_images).logits.argmax(dim=1)
+        successes = batched_predictions != labels
+        num_sucesses = successes.sum().item()
 
-        # batched_accuracy = 
+
+
+        wandb.log({f"Attack Success Rate in Batch_{self.image_counter}": successes/len(images) })
         
     
 
-        wandb.finish()
 
-        return adv_images
+        return adv_image, num_sucesses
     
 
 

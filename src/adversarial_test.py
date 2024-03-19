@@ -40,6 +40,7 @@ def main():
     hugginface_model = getYAMLParameter(attacks_config, "model", "hugginface_model")
     use_preprocessor = getYAMLParameter(attacks_config, "model", "use_preprocessor")
     enable_wandb = getYAMLParameter(attacks_config, "enable_wand")
+    enable_gpu = getYAMLParameter(attacks_config, "enable_gpu")
     clip_enable = getYAMLParameter(attacks_config, "embedding_models", "clip_enable")
     embedding_dataset = getYAMLParameter(attacks_config, "embedding_models", "dataset")
     true_embeddings = None
@@ -48,8 +49,7 @@ def main():
     sample_dataset_number = getYAMLParameter(attacks_config, "dataset", "sample_number")
     dataset.shuffle(seed=42)
 
-    # TODO: RAM comsuption on ImageNet Data is way to costly we need to either 
-    #  Delete the previous dataset or select an extract of that data.
+
     if sample_dataset_number:
         dataset = dataset['train'].select(range(sample_dataset_number))
 
@@ -62,10 +62,16 @@ def main():
     if enable_wandb:
         wandb.login()
 
+    if enable_gpu:
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+
     if clip_enable:
         # Load CLIP model and processor
         config = AutoConfig.from_pretrained("openai/clip-vit-base-patch32")
         clip_model = AutoModel.from_config(config)
+        clip_model.to(device)
 
 
 
@@ -76,9 +82,8 @@ def main():
         model = AutoModelForImageClassification()
 
 
-
     #Load the model from the checkpoint 
-    model = AutoModelForImageClassification.from_pretrained(hugginface_model)
+    model = AutoModelForImageClassification.from_pretrained(hugginface_model).to(device)
     image_processor = AutoImageProcessor.from_pretrained(hugginface_model)
 
     def preprocess_images(examples):
@@ -116,7 +121,10 @@ def main():
         
     # model = DenseModel(224*224*3,300,500,1000)
 
-    wandb_config = {
+
+
+    if enable_one_pixel_attack:
+        wandb_config_one_pixel = {
         "targeted": targeted,
         "targeted_labels": targeted_labels,
         "population": population,
@@ -125,9 +133,7 @@ def main():
         "attack": "one_pixel"
     }
 
-
-    if enable_one_pixel_attack:
-        one_pixel_attack = OnePixelLogger("OnePixelAttack",wandb_config,model, num_pixels, onepixel_steps, population)
+        one_pixel_attack = OnePixelLogger("OnePixelAttack",wandb_config_one_pixel,model, num_pixels, onepixel_steps, population)
 
     if enable_cw:
         cw_attack = CWLogger(model=model, steps=steps_cw, kappa=kappa_cw)
@@ -144,7 +150,6 @@ def main():
         test_attack(
         dataset=processed_dataset, 
         batch_size=200, 
-        device="cuda", 
         output_dir="./results", 
         targeted=targeted,
         attacks=[one_pixel_attack]
@@ -164,7 +169,7 @@ def main():
 
 
 
-def test_attack(dataset, batch_size, device: str, output_dir: str, targeted: bool, attacks = []):
+def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks = []):
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     total_batches = len(dataloader)
     save_interval = max(1, math.ceil(total_batches / 10))  # Ensure at least 1 to avoid division by zero
@@ -173,10 +178,12 @@ def test_attack(dataset, batch_size, device: str, output_dir: str, targeted: boo
     for attack in attacks:
         print("Attack Name: ", attack)
         batch_counter = 0
+        total_sucesses = 0
+
         for batch in dataloader:
             print("Batch: ", batch["pixel_values"].shape)
-            adv_images = attack(batch["pixel_values"], batch["label"])
-            
+            adv_images, sucess_attacks = attack(batch["pixel_values"], batch["label"])
+            total_sucesses += sucess_attacks
             # Check if it's time to save grid images
             if batch_counter % save_interval == 0:
                 pass
@@ -186,6 +193,7 @@ def test_attack(dataset, batch_size, device: str, output_dir: str, targeted: boo
             # Stop if you've saved 10 sets of images
             if batch_counter // save_interval >= 10:
                 break
+        wandb.log({"Attack Successes": total_sucesses})
 
 if __name__ == "__main__":
     main()

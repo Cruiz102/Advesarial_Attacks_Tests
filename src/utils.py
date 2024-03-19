@@ -165,9 +165,9 @@ def save_grid_images(images, rows, cols, experiment_name, output_dir='outputs'):
 
 # Code fro the robustbench utils 
 # https://github.com/RobustBench/robustbench/blob/master/robustbench/utils.py
-def clean_accuracy(model: nn.Module,
-                   x: torch.Tensor,
-                   y: torch.Tensor,
+def clean_accuracy(
+                   predicted_y: torch.Tensor,
+                   real_y: torch.Tensor,
                    batch_size: int = 100,
                    device: torch.device = None):
     if device is None:
