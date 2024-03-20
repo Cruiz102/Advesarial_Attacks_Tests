@@ -1,6 +1,6 @@
 
 enable_wandb: True
-enable_gpu: true 
+enable_gpu: True 
 
 model:
   name: 'ResNet18' #the Name you want to give to the model
@@ -15,7 +15,7 @@ dataset:
   train_on_dataset: True # If train on dataset is true it will use the true labels from the dataset. If it is set to False
                          # it will run the model with the images and generate pseudo labels to use for training.
   dataset_path: "mrm8488/ImageNet1K-val"
-  sample_number: 1  # Number of samples to use from the dataset for the evaluation
+  sample_number: 30  # Number of samples to use from the dataset for the evaluation
 
 
 

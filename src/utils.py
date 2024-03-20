@@ -68,21 +68,22 @@ def read_yaml(yaml_file: str) -> Optional[Any] :
         return None
 
 
-def getYAMLParameter(yaml_config: Dict,field: str, key: str = None) -> Any:
-   """    Parameters:
-    - yaml_config: The YAML configuration represented as a dictionary.
-    - field: The top-level field to search within.
-    - key: The key whose value is to be retrieved.
+def getYAMLParameter(yaml_config: dict, field: str, key: str = None) -> any:
     """
-   if field in yaml_config:
-        field_content = yaml_config[field]
-        if isinstance(field_content, dict) and key in field_content:
-            return field_content[key]
-        elif isinstance(field_content, list):
-            for item in field_content:
-                if isinstance(item, dict) and key in item:
-                    return item[key]
-        return None
+    Parameters:
+    - yaml_config: The YAML configuration represented as a dictionary.
+    - field: The top-level field to search within or the exact field if key is None.
+    - key: The key whose value is to be retrieved if looking for a value in a nested dictionary.
+    """
+    if key is None:
+        # If no key is provided, return the value of the field directly.
+        return yaml_config.get(field)
+    else:
+        # If a key is provided, first find the field which should be a dict, then return the value of the key within that dict.
+        field_content = yaml_config.get(field)
+        if isinstance(field_content, dict):
+            return field_content.get(key)
+    return None
 
 
 def one_hot_encode(labels, num_classes=100) -> torch.tensor:

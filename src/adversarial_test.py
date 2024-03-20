@@ -18,6 +18,9 @@ import math
 import argparse 
 import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
 
 
 
@@ -47,11 +50,9 @@ def main():
     hugginface_dataset_dir = getYAMLParameter(attacks_config, "dataset", "dataset_path")
     dataset = load_dataset(hugginface_dataset_dir) 
     sample_dataset_number = getYAMLParameter(attacks_config, "dataset", "sample_number")
-    dataset.shuffle(seed=42)
-
 
     if sample_dataset_number:
-        dataset = dataset['train'].select(range(sample_dataset_number))
+        dataset = dataset['train'].select(range(sample_dataset_number)).shuffle()
 
     # Check if the dataset has a "label" column
     if "label" in dataset.features.keys():
@@ -93,7 +94,7 @@ def main():
         return examples
 
     # Apply preprocessing
-    processed_dataset = dataset.map(preprocess_images, batched=True, remove_columns=["image"]).with_format("torch")
+    processed_dataset = dataset.map(preprocess_images, batched=True, remove_columns=["image"]).with_format("torch").shuffle()
     # if isinstance([0], int):
     # # Converting Labels to their one hot encoded representation
     #     one_hot_encode(processed_dataset[], num_classes=len(processed_dataset.features["label"].names))
@@ -141,18 +142,15 @@ def main():
     if enable_PGD:
         pgd_attack = PGDLogger(model, steps=steps_pgd)
 
-
-    dataset = HugginfaceProcessorData(dataset)
-    
-
     if use_preprocessor: 
         processed_dataset = HugginfaceProcessorData(processed_dataset)
         test_attack(
         dataset=processed_dataset, 
-        batch_size=200, 
+        batch_size=10, 
         output_dir="./results", 
         targeted=targeted,
-        attacks=[one_pixel_attack]
+        attacks=[one_pixel_attack], 
+        device=device
     )
     else:
         pass
@@ -169,7 +167,7 @@ def main():
 
 
 
-def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks = []):
+def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks = [], device: str = "cpu"):
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     total_batches = len(dataloader)
     save_interval = max(1, math.ceil(total_batches / 10))  # Ensure at least 1 to avoid division by zero
@@ -179,10 +177,15 @@ def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks =
         print("Attack Name: ", attack)
         batch_counter = 0
         total_sucesses = 0
-
+        y_total_pred = torch.tensor([])
+        attack.init_wandb()
         for batch in dataloader:
-            print("Batch: ", batch["pixel_values"].shape)
-            adv_images, sucess_attacks = attack(batch["pixel_values"], batch["label"])
+            adv_images, sucess_attacks,original_fails, batched_pred, original_pred = attack(batch["pixel_values"], batch["label"])
+            batched_pred = batched_pred.cpu()
+            original_pred = original_pred.detach().cpu()
+
+            y_total_pred = torch.cat((y_total_pred, batched_pred) )
+
             total_sucesses += sucess_attacks
             # Check if it's time to save grid images
             if batch_counter % save_interval == 0:
@@ -193,8 +196,26 @@ def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks =
             # Stop if you've saved 10 sets of images
             if batch_counter // save_interval >= 10:
                 break
-        wandb.log({"Attack Successes": total_sucesses})
+        print(y_total_pred.flatten().shape)
+        print(batched_pred.shape)
+        wandb.log({"Attack Successes": total_sucesses/ len(dataset)})
+        wandb.log({"Original_fails": original_fails/ len(dataset)})
+        # Step 5: Create and display the confusion matrix
+        conf_matrix = confusion_matrix(y_total_pred.flatten(), batch["label"])
 
+        # Displaying the confusion matrix using seaborn for better visualization
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues")
+        plt.ylabel('Actual')
+        plt.xlabel('Predicted')
+        plt.title('Confusion Matrix')
+        # Save the plot to a file
+        filename = "confusion_matrix.png"
+        plt.savefig(filename)
+
+        # Log the confusion matrix image file to wandb
+        wandb.log({"confusion_matrix": wandb.Image(filename)})
+        wandb.finish()
 if __name__ == "__main__":
     main()
 

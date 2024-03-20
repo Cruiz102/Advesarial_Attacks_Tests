@@ -12,11 +12,27 @@ import numpy as np
 from  transformers.modeling_outputs import ImageClassifierOutput
 from typing import Tuple
 from utils import clean_accuracy
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
 
 #  The goal in here will be to implement the loops of the attacks
 #  with tqdm and wandb.
 
-class OnePixelLogger(ta.OnePixel):
+class AttackLogger:
+    def __init__(self, project_name, wandb_config) -> None:
+        self.wandb_config = wandb_config
+        self.project_name = project_name
+    
+    def init_wandb(self):
+        # Initialize wandb run
+        wandb.init(project=self.project_name,
+                   name=self.wandb_config["name"],
+                   config = self.wandb_config)
+
+
+
+class OnePixelLogger(ta.OnePixel, AttackLogger):
     def __init__(self,project_name,wandb_config=None, *args, **kwargs):
         # Forward arguments to the Parent class
         super().__init__(*args, **kwargs)
@@ -38,24 +54,23 @@ class OnePixelLogger(ta.OnePixel):
         outs = torch.cat(outs)
         prob = F.softmax(outs, dim=1)
         return prob.detach().cpu().numpy()
+    
 
 
     def forward(self, images, labels) -> Tuple[torch.Tensor, int, int]:
         # Initialize wandb run
-        wandb.init(project=self.project_name,
-                   name=f"image_{self.image_counter}",
-                   config = self.wandb_config)
         print(f"Image Counter: {self.image_counter}", type(self.image_counter))
         self.image_counter += 1
 
         images = images.clone().detach().to(self.device)
         labels = labels.clone().detach().to(self.device)
+        print("devices", images.device, labels.device)
 
         input_grid = vutils.make_grid(images, nrow=int(math.sqrt(images.size(0))), normalize=True)
         # Wandb have an issue having the number of channels on the first parameter of the shape
         # we need to permute it.
         input_grid = input_grid.permute(1, 2, 0)
-        wandb.log({f"Input Images_batch_{self.image_counter}": wandb.Image(input_grid.numpy(), caption="Input Batch")})
+        wandb.log({f"Input Images_batch_{self.image_counter}": wandb.Image(input_grid.cpu().numpy(), caption="Input Batch")})
 
         if self.targeted:
             target_labels = self.get_target_label(images, labels)
@@ -118,24 +133,29 @@ class OnePixelLogger(ta.OnePixel):
         print(input_grid.shape)
         
         # Optionally log the final output as an artifact, if useful
-        wandb.log({"Final Adversarial Images": wandb.Image(adv_grid.numpy(), caption="Final Adversarial Images")})
-#  Get the label from batched prediction with the hisgtest probability
+        wandb.log({"Final Adversarial Images": wandb.Image(adv_grid.cpu().numpy(), caption="Final Adversarial Images")})
+    #  Get the label from batched prediction with the hisgtest probability
         batched_predictions = self.model(adv_images).logits.argmax(dim=1)
+        print("Batched Predictions", batched_predictions.shape)
+        print(batched_predictions.shape)
+        original_predictions = self.model(images).logits.argmax(dim=1)
         successes = batched_predictions != labels
         num_sucesses = successes.sum().item()
+        original_failures = original_predictions != labels
 
 
 
-        wandb.log({f"Attack Success Rate in Batch_{self.image_counter}": successes/len(images) })
-        
+        wandb.log({f"Attack Success Rate in Attacked_Batch_{self.image_counter}": successes/len(images) })
+        wandb.log({f"Attack Success Rate in Original_Batch_{self.image_counter}": original_failures/len(images) })
+
     
 
 
-        return adv_image, num_sucesses
+        return adv_image, num_sucesses,original_failures, batched_predictions, original_predictions
     
 
 
-class CWLogger(ta.CW):
+class CWLogger(ta.CW, AttackLogger):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -214,7 +234,7 @@ class CWLogger(ta.CW):
     
 
 
-class PGDLogger(ta.PGD):
+class PGDLogger(ta.PGD, AttackLogger):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
