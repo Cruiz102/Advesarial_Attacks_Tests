@@ -14,13 +14,15 @@ model:
 dataset:
   train_on_dataset: True # If train on dataset is true it will use the true labels from the dataset. If it is set to False
                          # it will run the model with the images and generate pseudo labels to use for training.
-  dataset_path: "mrm8488/ImageNet1K-val"
+  dataset_path: "cifar100"
   sample_number: 30  # Number of samples to use from the dataset for the evaluation
-
+  image_feature_title: "img" #Check on the specification of the dataset to see the name of the feature that contains the image
+  label_feature_title: "fine_label"
+  
 
 
 embedding_models:
-  clip_model_enable : True
+  clip_model_enable : False
 
 
 attack:

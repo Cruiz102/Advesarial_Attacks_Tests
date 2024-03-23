@@ -21,6 +21,7 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
+from clip_classifier import clip_classifier
 
 
 
@@ -33,11 +34,29 @@ def parse_args():
     return args
 
 
+def infere_titles(titles):
+    """
+    This function exist for classyfying on different names of titles.
+    it will raise an error if  there is an ambigious titles and the program
+    will expect that the user specify the titles of the models.
+    """
+    import nltk
+    from nltk.tokenize import word_tokenize
+
+# Download the NLTK data needed for tokenization
+    nltk.download('punkt')
+
+    titles_list = []
+    for title in titles:
+        title = title.split("/")[-1]
+        title = title.split(".")[0]
+        titles_list.append(title)
+    return titles_list
+
 def main(): 
     args = parse_args()
 
     # Read the yaml config file of the configuration of the attacks
-    models_dict = {} # A Dictionary to hold the order of the models to execute
     attacks_config = read_yaml("config/attacks_config.yml")
     local_checkpoint = getYAMLParameter(attacks_config, "model", "local_model_path")
     hugginface_model = getYAMLParameter(attacks_config, "model", "hugginface_model")
@@ -50,14 +69,18 @@ def main():
     hugginface_dataset_dir = getYAMLParameter(attacks_config, "dataset", "dataset_path")
     dataset = load_dataset(hugginface_dataset_dir) 
     sample_dataset_number = getYAMLParameter(attacks_config, "dataset", "sample_number")
+    train_on_dataset = getYAMLParameter(attacks_config, "dataset", "train_on_dataset")
+    image_feature_title  = getYAMLParameter(attacks_config, "dataset", "image_feature_title")
+    label_feature_title = getYAMLParameter(attacks_config, "dataset", "label_feature_title")
 
+    
     if sample_dataset_number:
         dataset = dataset['train'].select(range(sample_dataset_number)).shuffle()
 
     # Check if the dataset has a "label" column
     if "label" in dataset.features.keys():
         # Get the labels and their corresponding names
-        labels = dataset.features["label"].names
+        labels_names = dataset.features[label_feature_title].names
 
     
     if enable_wandb:
@@ -68,19 +91,16 @@ def main():
     else:
         device = torch.device("cpu")
 
-    if clip_enable:
-        # Load CLIP model and processor
-        config = AutoConfig.from_pretrained("openai/clip-vit-base-patch32")
-        clip_model = AutoModel.from_config(config)
-        clip_model.to(device)
-
-
-
     if local_checkpoint and hugginface_model:
         raise Exception("""Choose either of the of the following configurations.
                  Local checkpoint and hugginface_model has been specified. Only one should be given""")
     if local_checkpoint:
-        model = AutoModelForImageClassification()
+        model = AutoModelForImageClassification()  
+
+
+    if not train_on_dataset:
+        labels = model(dataset["train"]["images"])
+        labels = labels.logits.argmax(dim=1)
 
 
     #Load the model from the checkpoint 
@@ -89,12 +109,11 @@ def main():
 
     def preprocess_images(examples):
         # Process the images
-        examples["pixel_values"] = image_processor(images=examples["image"], return_tensors="pt")["pixel_values"]
-        # examples["label"] = one_hot_encode(examples["label"], num_classes=len(labels))    
+        examples["pixel_values"] = image_processor(images=examples[image_feature_title], return_tensors="pt")["pixel_values"] 
         return examples
 
     # Apply preprocessing
-    processed_dataset = dataset.map(preprocess_images, batched=True, remove_columns=["image"]).with_format("torch").shuffle()
+    processed_dataset = dataset.map(preprocess_images, batched=True, remove_columns=[image_feature_title]).with_format("torch").shuffle()
     # if isinstance([0], int):
     # # Converting Labels to their one hot encoded representation
     #     one_hot_encode(processed_dataset[], num_classes=len(processed_dataset.features["label"].names))
@@ -123,6 +142,9 @@ def main():
     # model = DenseModel(224*224*3,300,500,1000)
 
 
+    if clip_enable:
+        model  = clip_classifier(clip_model_name="openai/clip-vit-base-patch32")
+
 
     if enable_one_pixel_attack:
         wandb_config_one_pixel = {
@@ -133,8 +155,12 @@ def main():
         "num_pixels": num_pixels,
         "attack": "one_pixel"
     }
-
-        one_pixel_attack = OnePixelLogger("OnePixelAttack",wandb_config_one_pixel,model, num_pixels, onepixel_steps, population)
+        one_pixel_attack = OnePixelLogger(project_name= "one_pixel_attack",
+                                          model=model,
+                                           wandb_config=wandb_config_one_pixel,
+                                           popsize = population,
+                                            pixels = num_pixels,
+                                             steps = onepixel_steps )
 
     if enable_cw:
         cw_attack = CWLogger(model=model, steps=steps_cw, kappa=kappa_cw)
@@ -198,10 +224,10 @@ def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks =
                 break
         print(y_total_pred.flatten().shape)
         print(batched_pred.shape)
-        wandb.log({"Attack Successes": total_sucesses/ len(dataset)})
-        wandb.log({"Original_fails": original_fails/ len(dataset)})
+        wandb.log({"Total Attack Successes Percentage": total_sucesses/ len(dataset)})
+        wandb.log({"Original_fails Percentage": original_fails/ len(dataset)})
         # Step 5: Create and display the confusion matrix
-        conf_matrix = confusion_matrix(y_total_pred.flatten(), batch["label"])
+        conf_matrix = confusion_matrix(y_total_pred.flatten(), batch["fine_label"])
 
         # Displaying the confusion matrix using seaborn for better visualization
         plt.figure(figsize=(8, 6))

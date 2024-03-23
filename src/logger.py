@@ -11,35 +11,36 @@ import torch.optim.optimizer as optim
 import numpy as np
 from  transformers.modeling_outputs import ImageClassifierOutput
 from typing import Tuple
-from utils import clean_accuracy
+from utils import clean_accuracy, l2_distance
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
+import io
+from PIL import Image
 
 #  The goal in here will be to implement the loops of the attacks
 #  with tqdm and wandb.
 
 class AttackLogger:
     def __init__(self, project_name, wandb_config) -> None:
-        self.wandb_config = wandb_config
         self.project_name = project_name
+        self.wandb_config = wandb_config
+        self.batch_counter = 0
     
     def init_wandb(self):
         # Initialize wandb run
         wandb.init(project=self.project_name,
-                   name=self.wandb_config["name"],
+                   name=self.wandb_config["attack"],
                    config = self.wandb_config)
 
 
 
 class OnePixelLogger(ta.OnePixel, AttackLogger):
-    def __init__(self,project_name,wandb_config=None, *args, **kwargs):
+    def __init__(self,project_name,model,wandb_config=None, *args, **kwargs):
+
+        AttackLogger.__init__(self, project_name=project_name, wandb_config=wandb_config)
         # Forward arguments to the Parent class
-        super().__init__(*args, **kwargs)
-        self.image_counter = 0
-        self.attack_success_counter = 0
-        self.project_name = project_name
-        self.wandb_config = wandb_config
+        super().__init__(model=model,*args, **kwargs)
     # Wrap the attack call with tqdm for a progress bar
         
     def _get_prob(self, images):
@@ -59,19 +60,12 @@ class OnePixelLogger(ta.OnePixel, AttackLogger):
 
     def forward(self, images, labels) -> Tuple[torch.Tensor, int, int]:
         # Initialize wandb run
-        print(f"Image Counter: {self.image_counter}", type(self.image_counter))
-        self.image_counter += 1
+        print(f"Batch Counter: {self.batch_counter}")
+        self.batch_counter += 1
 
         images = images.clone().detach().to(self.device)
         labels = labels.clone().detach().to(self.device)
         print("devices", images.device, labels.device)
-
-        input_grid = vutils.make_grid(images, nrow=int(math.sqrt(images.size(0))), normalize=True)
-        # Wandb have an issue having the number of channels on the first parameter of the shape
-        # we need to permute it.
-        input_grid = input_grid.permute(1, 2, 0)
-        wandb.log({f"Input Images_batch_{self.image_counter}": wandb.Image(input_grid.cpu().numpy(), caption="Input Batch")})
-
         if self.targeted:
             target_labels = self.get_target_label(images, labels)
 
@@ -94,9 +88,7 @@ class OnePixelLogger(ta.OnePixel, AttackLogger):
 
                 def callback(delta, convergence):
                     success = self._attack_success(image, target_label, delta)
-                    if success: 
-                        self.attack_success_counter += 1
-                    wandb.log({"Attack Success": self.attack_success_counter, "Convergence": convergence})
+                    wandb.log({ "Convergence": convergence})
                     return success
 
             else:
@@ -106,9 +98,7 @@ class OnePixelLogger(ta.OnePixel, AttackLogger):
 
                 def callback(delta, convergence):
                     success = self._attack_success(image, label, delta)
-                    if success: 
-                        self.attack_success_counter += 1
-                    wandb.log({"Attack Success": self.attack_success_counter, "Convergence": convergence})
+                    wandb.log({ "Convergence": convergence})
                     return success
 
             delta = differential_evolution(
@@ -125,33 +115,61 @@ class OnePixelLogger(ta.OnePixel, AttackLogger):
             delta = np.split(delta, len(delta) / len(bounds))
             adv_image = self._perturb(image, delta)
             adv_images.append(adv_image)
-
         adv_images = torch.cat(adv_images)
-
-        adv_grid = vutils.make_grid(adv_images, nrow=int(math.sqrt(images.size(0))), normalize=True)
-        adv_grid = adv_grid.permute(1, 2, 0)
-        print(input_grid.shape)
-        
-        # Optionally log the final output as an artifact, if useful
-        wandb.log({"Final Adversarial Images": wandb.Image(adv_grid.cpu().numpy(), caption="Final Adversarial Images")})
     #  Get the label from batched prediction with the hisgtest probability
         batched_predictions = self.model(adv_images).logits.argmax(dim=1)
-        print("Batched Predictions", batched_predictions.shape)
-        print(batched_predictions.shape)
         original_predictions = self.model(images).logits.argmax(dim=1)
-        successes = batched_predictions != labels
-        num_sucesses = successes.sum().item()
-        original_failures = original_predictions != labels
+        adv_accurary = batched_predictions == labels
+        num_sucesses = adv_accurary.sum().item()
+        original_accuracy = original_predictions == labels
+        num_og_sucesses = original_accuracy.sum().item()
 
 
 
-        wandb.log({f"Attack Success Rate in Attacked_Batch_{self.image_counter}": successes/len(images) })
-        wandb.log({f"Attack Success Rate in Original_Batch_{self.image_counter}": original_failures/len(images) })
+        l2_distance_metric = l2_distance(batched_predictions,images, adv_images, labels, self.device)
+        wandb.log({"L2 Distance": l2_distance_metric})
+
+        wandb.log({"Attack Success Rate in Attacked_Batch": num_sucesses/len(images) })
+        wandb.log({"Original_Batch Accuracy": num_og_sucesses/len(images) },)
+
+
+        input_grid = vutils.make_grid(images, nrow=int(math.sqrt(images.size(0))), normalize=True)
+        # Wandb have an issue having the number of channels on the first parameter of the shape
+        # we need to permute it.
+        input_grid = input_grid.permute(1, 2, 0)
+        adv_grid = vutils.make_grid(adv_images, nrow=int(math.sqrt(images.size(0))), normalize=True)
+        adv_grid = adv_grid.permute(1, 2, 0)
+        # Convert PyTorh tensors to numpy arrays for Matplotlib
+        input_np = input_grid.cpu().numpy()
+        adv_np = adv_grid.cpu().numpy()
+
+        # Create a figure and a set of subplots
+        fig, axs = plt.subplots(2, 1, figsize=(10, 20))
+
+        # Remove axes for a cleaner look
+        for ax in axs:
+            ax.axis('off')
+
+        # Plot both images
+        axs[0].imshow(input_np)
+        axs[0].set_title("Input Batch")
+        axs[1].imshow(adv_np)
+        axs[1].set_title("Final Adversarial Images")
+
+        # Tight layout to maximize image size
+        plt.tight_layout()
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        image = Image.open(buf)
+        wandb.log({f"Combined Images_batch_{self.batch_counter}": wandb.Image(image, caption="Input and Final Adversarial Images")})
+        # Close the plt object to free memory
+        plt.close(fig)
 
     
 
 
-        return adv_image, num_sucesses,original_failures, batched_predictions, original_predictions
+        return adv_image, num_sucesses,num_og_sucesses, batched_predictions, original_predictions
     
 
 

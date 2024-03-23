@@ -52,7 +52,7 @@ class HugginfaceProcessorData(Dataset):
 
         return {
             "pixel_values": item["pixel_values"],
-            "label": item["label"],
+            "label": item["fine_label"],
             # 'image': item['image']    # Include other relevant fields
         }
 
@@ -163,6 +163,14 @@ def save_grid_images(images, rows, cols, experiment_name, output_dir='outputs'):
     grid_path = os.path.join(experiment_dir, 'grid.png') 
     plt.savefig(grid_path)
     print(f"Saved grid images to {grid_path}")
+
+
+
+def l2_distance(predicted_labels, images, adv_images, labels, device="cuda"):
+    corrects = (labels.to(device) == predicted_labels)
+    delta = (adv_images - images.to(device)).view(len(images), -1)
+    l2 = torch.norm(delta[~corrects], p=2, dim=1).mean()
+    return l2
 
 # Code fro the robustbench utils 
 # https://github.com/RobustBench/robustbench/blob/master/robustbench/utils.py
