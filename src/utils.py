@@ -22,24 +22,12 @@ from PIL import Image
 import torch
 from torch.utils.data import Dataset
 
-class ImageProcessingDataset(Dataset):
-
-#  A dataset for processing each the images before using them in the model
-    def __init__(self, image_processor, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.feature_extractor = image_processor
-
-    def __call__(self, features):
-        # Convert file paths or PIL images in 'features' to actual images
-        
-        # Use the feature_extractor to preprocess the images
-        batch = self.feature_extractor(images=features["images"], return_tensors="pt")
-        
-        return batch
 
 class HugginfaceProcessorData(Dataset):
-    def __init__(self, processed_dataset):
+    def __init__(self, processed_dataset, label_title ,image_feature_title = "pixel_values"):
         self.dataset = processed_dataset
+        self.image_feature_title = image_feature_title
+        self.label_title = label_title
 
     def __len__(self):
         return len(self.dataset)
@@ -51,8 +39,8 @@ class HugginfaceProcessorData(Dataset):
         # e.g. convert a PIL image to a tensor
 
         return {
-            "pixel_values": item["pixel_values"],
-            "label": item["fine_label"],
+            self.image_feature_title: item[self.image_feature_title],
+            self.label_title: item[self.label_title],
             # 'image': item['image']    # Include other relevant fields
         }
 
@@ -206,8 +194,7 @@ def generate_csv_data(output_dir):
             f.write(f'{model_name},{clean_acc}\n')
 
 
-def confussion_matrix(model, x, y, device, batch_size=100):
-    #  plot a confussion matrix
+
 
     pass
 def embeddings_interpolation(pixel_value):

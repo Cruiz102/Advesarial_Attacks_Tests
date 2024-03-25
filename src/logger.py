@@ -128,9 +128,12 @@ class OnePixelLogger(ta.OnePixel, AttackLogger):
 
         l2_distance_metric = l2_distance(batched_predictions,images, adv_images, labels, self.device)
         wandb.log({"L2 Distance": l2_distance_metric})
+        print(num_og_sucesses, num_sucesses, "asdkghaskdgksha")
 
-        wandb.log({"Attack Success Rate in Attacked_Batch": num_sucesses/len(images) })
-        wandb.log({"Original_Batch Accuracy": num_og_sucesses/len(images) },)
+        # TODO: Verify why this logs are not working correctly!!
+
+        # wandb.log({"Attack Success Rate in Attacked_Batch": num_sucesses/len(images) })
+        # wandb.log({"Original_Batch Accuracy": num_og_sucesses/len(images) },)
 
 
         input_grid = vutils.make_grid(images, nrow=int(math.sqrt(images.size(0))), normalize=True)
@@ -143,26 +146,24 @@ class OnePixelLogger(ta.OnePixel, AttackLogger):
         input_np = input_grid.cpu().numpy()
         adv_np = adv_grid.cpu().numpy()
 
-        # Create a figure and a set of subplots
-        fig, axs = plt.subplots(2, 1, figsize=(10, 20))
+        fig, axs = plt.subplots(1, 2, figsize=(20, 10))  # Ajusta el 'figsize' según sea necesario.
 
-        # Remove axes for a cleaner look
+        # Eliminar ejes para una apariencia más limpia.
         for ax in axs:
             ax.axis('off')
 
-        # Plot both images
+        # Trama ambas imágenes con etiquetas.
         axs[0].imshow(input_np)
-        axs[0].set_title("Input Batch")
+        axs[0].set_title("Batch de Entrada")
         axs[1].imshow(adv_np)
-        axs[1].set_title("Final Adversarial Images")
+        axs[1].set_title("Imágenes Adversarias Finales")
 
-        # Tight layout to maximize image size
         plt.tight_layout()
         buf = io.BytesIO()
         plt.savefig(buf, format='png')
         buf.seek(0)
         image = Image.open(buf)
-        wandb.log({f"Combined Images_batch_{self.batch_counter}": wandb.Image(image, caption="Input and Final Adversarial Images")})
+        wandb.log({f"Imágenes Combinadas_batch_{self.batch_counter}": wandb.Image(image, caption="Entrada y Imágenes Adversarias Finales")})
         # Close the plt object to free memory
         plt.close(fig)
 

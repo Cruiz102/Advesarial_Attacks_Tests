@@ -169,7 +169,7 @@ def main():
         pgd_attack = PGDLogger(model, steps=steps_pgd)
 
     if use_preprocessor: 
-        processed_dataset = HugginfaceProcessorData(processed_dataset)
+        processed_dataset = HugginfaceProcessorData(processed_dataset, label_feature_title)
         test_attack(
         dataset=processed_dataset, 
         batch_size=10, 
@@ -195,6 +195,9 @@ def main():
 
 def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks = [], device: str = "cpu"):
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    image_title = dataset.image_feature_title
+    label_title = dataset.label_title
+
     total_batches = len(dataloader)
     save_interval = max(1, math.ceil(total_batches / 10))  # Ensure at least 1 to avoid division by zero
 
@@ -206,7 +209,7 @@ def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks =
         y_total_pred = torch.tensor([])
         attack.init_wandb()
         for batch in dataloader:
-            adv_images, sucess_attacks,original_fails, batched_pred, original_pred = attack(batch["pixel_values"], batch["label"])
+            adv_images, sucess_attacks,original_fails, batched_pred, original_pred = attack(batch[image_title], batch[label_title])
             batched_pred = batched_pred.cpu()
             original_pred = original_pred.detach().cpu()
 
@@ -227,7 +230,7 @@ def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks =
         wandb.log({"Total Attack Successes Percentage": total_sucesses/ len(dataset)})
         wandb.log({"Original_fails Percentage": original_fails/ len(dataset)})
         # Step 5: Create and display the confusion matrix
-        conf_matrix = confusion_matrix(y_total_pred.flatten(), batch["fine_label"])
+        conf_matrix = confusion_matrix(y_total_pred.flatten(), batch[label_title])
 
         # Displaying the confusion matrix using seaborn for better visualization
         plt.figure(figsize=(8, 6))
