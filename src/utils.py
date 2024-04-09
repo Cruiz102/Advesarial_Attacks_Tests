@@ -23,6 +23,26 @@ import torch
 from torch.utils.data import Dataset
 
 
+class ClipDataset(Dataset):
+    def __init__(self, processed_dataset):
+        self.dataset = processed_dataset
+    def __len__(self):
+        return len(self.dataset)
+    
+    def __getitem__(self, idx):
+        # Assuming processed_dataset is indexed like a list or dict
+        item = self.dataset[idx]
+        # Convert item to the desired format if necessary
+        # e.g. convert a PIL image to a tensor
+
+        return {
+            "pixel_values": item["pixel_values"],
+            "input_ids": item["input_ids"],
+            "attention_mask": item["attention_mask"],
+            # 'image': item['image']    # Include other relevant fields
+        }
+
+
 class HugginfaceProcessorData(Dataset):
     def __init__(self, processed_dataset, label_title ,image_feature_title = "pixel_values"):
         self.dataset = processed_dataset

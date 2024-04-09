@@ -7,6 +7,7 @@
 
 import matplotlib.pyplot as plt
 from transformers import AutoModelForImageClassification, AutoConfig, TrainingArguments, Trainer, AutoModel, AutoImageProcessor
+from transformers import CLIPProcessor, CLIPModel
 from utils import read_yaml, getYAMLParameter, HugginfaceProcessorData
 from datasets import load_dataset
 from torch.utils.data import DataLoader
@@ -131,18 +132,26 @@ def main():
 
 
     if clip_enable:
-        model  = clip_classifier(clip_model_name="openai/clip-vit-base-patch32", labels_name=labels_names)
-        image_processor = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
-
-
-
-    def preprocess_images(examples):
-        # Process the images
-        examples["pixel_values"] = image_processor(images=examples[image_feature_title], return_tensors="pt")["pixel_values"] 
-        return examples
-
-    # Apply preprocessing
-    processed_dataset = dataset.map(preprocess_images, batched=True, remove_columns=[image_feature_title]).with_format("torch").shuffle()
+        model  = clip_classifier(clip_model_name="openai/clip-vit-base-patch32",
+                                  labels_name=labels_names).to(device)
+        image_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        def clip_preprocess(examples):
+            # Process the images
+            inputs = image_processor(text = labels_names, images=examples[image_feature_title], return_tensors="pt",padding = True).data
+            print(len(inputs["input_ids"]), "asdflkj")
+            examples["pixel_values"] = inputs["pixel_values"]
+            examples["input_ids"] = {"inputs":inputs["input_ids"]}
+            # examples["attention_mask"] = inputs["attention_mask"]
+            return examples
+        
+        processed_dataset =  dataset.map(clip_preprocess, batched=True)
+    else:
+        def preprocess_images(examples):
+            # Process the images
+            examples["pixel_values"] = image_processor(images=examples[image_feature_title], return_tensors="pt")["pixel_values"]
+            return examples
+        # Apply preprocessing
+        processed_dataset = dataset.map(preprocess_images, batched=True, ).with_format("torch").shuffle()
 
     # from custom_models import DenseModel
     # model = DenseModel(224*224*3,300,500,1000)

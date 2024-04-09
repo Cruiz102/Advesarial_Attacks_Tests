@@ -14,8 +14,6 @@ class clip_classifier(nn.Module):
             self.clip_processor = CLIPProcessor.from_pretrained(clip_model_name)
         else:
             model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-            processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-
 
 
     def forward(self, images)-> torch.Tensor:

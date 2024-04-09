@@ -1,6 +1,6 @@
 
 enable_wandb: True
-enable_gpu: False
+enable_gpu: true
 
 model:
   name: 'ResNet18' #the Name you want to give to the model
