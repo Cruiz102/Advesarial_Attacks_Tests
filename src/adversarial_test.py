@@ -63,7 +63,7 @@ def main():
     use_preprocessor = getYAMLParameter(attacks_config, "model", "use_preprocessor")
     enable_wandb = getYAMLParameter(attacks_config, "enable_wand")
     enable_gpu = getYAMLParameter(attacks_config, "enable_gpu")
-    clip_enable = getYAMLParameter(attacks_config, "embedding_models", "clip_enable")
+    clip_enable = getYAMLParameter(attacks_config, "embedding_models", "clip_model_enable")
     embedding_dataset = getYAMLParameter(attacks_config, "embedding_models", "dataset")
     true_embeddings = None
     hugginface_dataset_dir = getYAMLParameter(attacks_config, "dataset", "dataset_path")
@@ -78,9 +78,8 @@ def main():
         dataset = dataset['train'].select(range(sample_dataset_number)).shuffle()
 
     # Check if the dataset has a "label" column
-    if "label" in dataset.features.keys():
-        # Get the labels and their corresponding names
-        labels_names = dataset.features[label_feature_title].names
+
+    labels_names = dataset.features[label_feature_title].names
 
     
     if enable_wandb:
@@ -107,16 +106,6 @@ def main():
     model = AutoModelForImageClassification.from_pretrained(hugginface_model).to(device)
     image_processor = AutoImageProcessor.from_pretrained(hugginface_model)
 
-    def preprocess_images(examples):
-        # Process the images
-        examples["pixel_values"] = image_processor(images=examples[image_feature_title], return_tensors="pt")["pixel_values"] 
-        return examples
-
-    # Apply preprocessing
-    processed_dataset = dataset.map(preprocess_images, batched=True, remove_columns=[image_feature_title]).with_format("torch").shuffle()
-    # if isinstance([0], int):
-    # # Converting Labels to their one hot encoded representation
-    #     one_hot_encode(processed_dataset[], num_classes=len(processed_dataset.features["label"].names))
 
 
     # Attacks Base Configurations
@@ -139,13 +128,24 @@ def main():
     enable_PGD = getYAMLParameter(attacks_config, "PGD", "enable_attack")
     steps_pgd = getYAMLParameter(attacks_config, "PGD", "steps")
         
-    # model = DenseModel(224*224*3,300,500,1000)
 
 
     if clip_enable:
-        model  = clip_classifier(clip_model_name="openai/clip-vit-base-patch32")
+        model  = clip_classifier(clip_model_name="openai/clip-vit-base-patch32", labels_name=labels_names)
+        image_processor = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
 
+
+    def preprocess_images(examples):
+        # Process the images
+        examples["pixel_values"] = image_processor(images=examples[image_feature_title], return_tensors="pt")["pixel_values"] 
+        return examples
+
+    # Apply preprocessing
+    processed_dataset = dataset.map(preprocess_images, batched=True, remove_columns=[image_feature_title]).with_format("torch").shuffle()
+
+    # from custom_models import DenseModel
+    # model = DenseModel(224*224*3,300,500,1000)
     if enable_one_pixel_attack:
         wandb_config_one_pixel = {
         "targeted": targeted,

@@ -1,6 +1,6 @@
 
 enable_wandb: True
-enable_gpu: True 
+enable_gpu: False
 
 model:
   name: 'ResNet18' #the Name you want to give to the model
@@ -22,7 +22,7 @@ dataset:
 
 
 embedding_models:
-  clip_model_enable : False
+  clip_model_enable : true
 
 
 attack:
