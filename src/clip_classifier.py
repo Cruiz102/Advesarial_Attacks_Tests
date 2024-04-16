@@ -15,9 +15,11 @@ class clip_classifier(nn.Module):
         else:
             model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
 
+        self.inputs_ids = self.clip_processor(text=self.labels_name, return_tensors="pt", padding=True)["input_ids"]
+
 
     def forward(self, images)-> torch.Tensor:
-        inputs = self.clip_processor(text=self.labels_name, images=images, return_tensors="pt", padding=True)
+        inputs = {"pixel_values": images, "input_ids" :self.inputs_ids}
         outputs = self.clip_model(**inputs)
         logits_per_image = outputs.logits_per_image # this is the image-text similarity score
         probs = logits_per_image.softmax(dim=1) # we can take the softmax to get the label probabilities
