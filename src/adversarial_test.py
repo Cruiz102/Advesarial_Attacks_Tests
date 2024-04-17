@@ -12,7 +12,7 @@ from utils import read_yaml, getYAMLParameter, HugginfaceProcessorData
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 from logger import OnePixelLogger, CWLogger, PGDLogger
-from utils import plot_grid, getYAMLParameter, one_hot_encode
+from utils import plot_grid, getYAMLParameter, l2_distance, plot_image_comparison
 import tqdm
 import wandb
 import math
@@ -133,11 +133,11 @@ def main():
 
     if clip_enable:
         model  = clip_classifier(clip_model_name="openai/clip-vit-base-patch32",
-                                  labels_name=labels_names).to(device)
+                                  labels_name=labels_names, device = device)
         image_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
         def clip_preprocess(examples):
             # Process the images
-            inputs = image_processor(text = labels_names, images=examples[image_feature_title], return_tensors="pt",padding = True).data
+            inputs = image_processor( images=examples[image_feature_title], return_tensors="pt",padding = True).data
             examples["pixel_values"] = inputs["pixel_values"]
             # examples["input_ids"] = inputs["input_ids"]
             # examples["attention_mask"] = inputs["attention_mask"]
@@ -214,29 +214,40 @@ def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks =
         print("Attack Name: ", attack)
         batch_counter = 0
         total_sucesses = 0
+        total_og_sucesses = 0
         y_total_pred = torch.tensor([])
         attack.init_wandb()
         for batch in dataloader:
-            adv_images, sucess_attacks,original_fails, batched_pred, original_pred = attack(batch[image_title], batch[label_title])
+            images = batch[image_title]
+            labels = batch[label_title]
+            adv_images, num_attack_sucesses,num_og_sucesses, batched_pred, original_pred = attack(images,labels)
             batched_pred = batched_pred.cpu()
             original_pred = original_pred.detach().cpu()
 
-            y_total_pred = torch.cat((y_total_pred, batched_pred) )
 
-            total_sucesses += sucess_attacks
+            l2_distance_metric = l2_distance(batched_pred,images, adv_images, labels, device)
+            wandb.log({"L2 Distance": l2_distance_metric})
+
+            wandb.log({"Attacked_Batch_Accuracy": num_attack_sucesses/len(images)})
+            wandb.log({"Original_Batch Accuracy": total_og_sucesses/len(images) })
+
+
+
+            y_total_pred = torch.cat((y_total_pred, batched_pred) )
+            total_sucesses += num_attack_sucesses
+            total_og_sucesses += num_og_sucesses
+
             # Check if it's time to save grid images
             if batch_counter % save_interval == 0:
-                pass
+                plot_image_comparison(images,adv_images,original_pred, batched_pred, labels, True, 4)
+                
             
             batch_counter += 1
 
-            # Stop if you've saved 10 sets of images
-            if batch_counter // save_interval >= 10:
-                break
         print(y_total_pred.flatten().shape)
         print(batched_pred.shape)
         wandb.log({"Total Attack Successes Percentage": total_sucesses/ len(dataset)})
-        wandb.log({"Original_fails Percentage": original_fails/ len(dataset)})
+        wandb.log({"Original_fails Percentage": total_og_sucesses/ len(dataset)})
         # Step 5: Create and display the confusion matrix
         conf_matrix = confusion_matrix(y_total_pred.flatten(), batch[label_title])
 

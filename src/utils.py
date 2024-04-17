@@ -174,7 +174,7 @@ def save_grid_images(images, rows, cols, experiment_name, output_dir='outputs'):
 
 
 
-def l2_distance(predicted_labels, images, adv_images, labels, device="cuda"):
+def l2_distance(predicted_labels, images, adv_images, labels, device="cpu"):
     corrects = (labels.to(device) == predicted_labels)
     delta = (adv_images - images.to(device)).view(len(images), -1)
     l2 = torch.norm(delta[~corrects], p=2, dim=1).mean()
@@ -204,16 +204,63 @@ def clean_accuracy(
     return acc.item() / x.shape[0]
 
 
-def generate_csv_data(output_dir):
-    #  A function that calculates the the clean accuracy for each model of a dataset given a model
-    clean_accuracy(model, x_test, y_test)
-    with open(os.path.join(output_dir, 'clean_accuracy.csv'), 'w') as f:
-        f.write('model_name,clean_accuracy\n')
-        for model_name, model in models.items():
-            clean_acc = clean_accuracy(model, x_test, y_test)
-            f.write(f'{model_name},{clean_acc}\n')
+import matplotlib.pyplot as plt
+import numpy as np
 
+def plot_image_comparison(original_images, attacked_images, original_preds, attacked_preds, true_labels, highlight_misclass=False, pairs_per_row=2):
+    assert len(original_images) == len(attacked_images) == len(original_preds) == len(attacked_preds) == len(true_labels), "All lists must have the same length."
+    
+    num_images = len(original_images)
+    num_rows = (num_images + pairs_per_row - 1) // pairs_per_row  # Calculate number of rows needed
+    fig, axes = plt.subplots(nrows=num_rows, ncols=2 * pairs_per_row, figsize=(4 * pairs_per_row, 2 * num_rows))  # Adjust figure size accordingly
+    
+    if num_images == 1 or num_rows == 1:
+        axes = np.expand_dims(axes, 0)  # Handle the case of 1 image or 1 row
+    
+    for i in range(num_images):
+        row = i // pairs_per_row
+        col = (i % pairs_per_row) * 2  # Each pair takes 2 columns in the grid
+        
+        # Plot original image
+        ax = axes[row, col] if num_rows > 1 else axes[col]
+        orig_img = np.array(original_images[i])
+        if highlight_misclass and original_preds[i] != true_labels[i]:
+            orig_img = np.clip(orig_img * 0.7 + np.array([255, 0, 0])[None, None, :] * 0.3, 0, 255).astype(np.uint8)
+            title_color = 'red'
+        else:
+            title_color = 'black'
+        ax.imshow(orig_img, interpolation='nearest')
+        ax.set_title(f'Orig\nPred: {original_preds[i]}, True: {true_labels[i]}', color=title_color)
+        ax.axis('off')
+        
+        # Plot attacked image
+        ax = axes[row, col + 1] if num_rows > 1 else axes[col + 1]
+        att_img = np.array(attacked_images[i])
+        if highlight_misclass and attacked_preds[i] != true_labels[i]:
+            att_img = np.clip(att_img * 0.7 + np.array([255, 0, 0])[None, None, :] * 0.3, 0, 255).astype(np.uint8)
+            title_color = 'red'
+        else:
+            title_color = 'black'
+        ax.imshow(att_img, interpolation='nearest')
+        ax.set_title(f'Att\nPred: {attacked_preds[i]}, True: {true_labels[i]}', color=title_color)
+        ax.axis('off')
+    
+    # Hide unused axes if the grid does not fill up completely
+    for j in range(i + 1, num_rows * pairs_per_row):
+        row = j // pairs_per_row
+        col = (j % pairs_per_row) * 2
+        axes[row, col].axis('off')
+        axes[row, col + 1].axis('off')
+    
+    plt.tight_layout()
+    plt.show()
 
+# Example usage:
+# Assume you have loaded or generated the appropriate images and predictions
+# original_images, attacked_images = [your_images], [your_attacked_images]
+# original_preds, attacked_preds = [your_original_predictions], [your_attacked_predictions]
+# true_labels = [your_true_labels]
+# plot_image_comparison(original_images, attacked_images, original_preds, attacked_preds, true_labels, highlight_misclass=True)
 
 
     pass

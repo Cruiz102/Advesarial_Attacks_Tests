@@ -126,50 +126,6 @@ class OnePixelLogger(ta.OnePixel, AttackLogger):
 
 
 
-        l2_distance_metric = l2_distance(batched_predictions,images, adv_images, labels, self.device)
-        wandb.log({"L2 Distance": l2_distance_metric})
-        print(num_og_sucesses, num_sucesses, "asdkghaskdgksha")
-
-        # TODO: Verify why this logs are not working correctly!!
-
-        # wandb.log({"Attack Success Rate in Attacked_Batch": num_sucesses/len(images) })
-        # wandb.log({"Original_Batch Accuracy": num_og_sucesses/len(images) },)
-
-
-        input_grid = vutils.make_grid(images, nrow=int(math.sqrt(images.size(0))), normalize=True)
-        # Wandb have an issue having the number of channels on the first parameter of the shape
-        # we need to permute it.
-        input_grid = input_grid.permute(1, 2, 0)
-        adv_grid = vutils.make_grid(adv_images, nrow=int(math.sqrt(images.size(0))), normalize=True)
-        adv_grid = adv_grid.permute(1, 2, 0)
-        # Convert PyTorh tensors to numpy arrays for Matplotlib
-        input_np = input_grid.cpu().numpy()
-        adv_np = adv_grid.cpu().numpy()
-
-        fig, axs = plt.subplots(1, 2, figsize=(20, 10))  # Ajusta el 'figsize' según sea necesario.
-
-        # Eliminar ejes para una apariencia más limpia.
-        for ax in axs:
-            ax.axis('off')
-
-        # Trama ambas imágenes con etiquetas.
-        axs[0].imshow(input_np)
-        axs[0].set_title("Batch de Entrada")
-        axs[1].imshow(adv_np)
-        axs[1].set_title("Imágenes Adversarias Finales")
-
-        plt.tight_layout()
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png')
-        buf.seek(0)
-        image = Image.open(buf)
-        wandb.log({f"Imágenes Combinadas_batch_{self.batch_counter}": wandb.Image(image, caption="Entrada y Imágenes Adversarias Finales")})
-        # Close the plt object to free memory
-        plt.close(fig)
-
-    
-
-
         return adv_image, num_sucesses,num_og_sucesses, batched_predictions, original_predictions
     
 
