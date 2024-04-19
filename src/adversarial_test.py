@@ -77,7 +77,7 @@ def main():
 
     
     if sample_dataset_number:
-        dataset = dataset['train'].select(range(sample_dataset_number)).shuffle()
+        dataset = dataset['train'].shuffle().select(range(sample_dataset_number))
 
     # Check if the dataset has a "label" column
 
