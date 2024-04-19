@@ -11,7 +11,7 @@ import torch.optim.optimizer as optim
 import numpy as np
 from  transformers.modeling_outputs import ImageClassifierOutput
 from typing import Tuple
-from utils import clean_accuracy, l2_distance
+from utils import  l2_distance
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
@@ -53,8 +53,7 @@ class OnePixelLogger(ta.OnePixel, AttackLogger):
                     out = out.logits
                 outs.append(out)
         outs = torch.cat(outs)
-        prob = F.softmax(outs, dim=1)
-        return prob.detach().cpu().numpy()
+        return outs.detach().cpu().numpy()
     
 
 
@@ -126,7 +125,7 @@ class OnePixelLogger(ta.OnePixel, AttackLogger):
 
 
 
-        return adv_image, num_sucesses,num_og_sucesses, batched_predictions, original_predictions
+        return adv_images, num_sucesses,num_og_sucesses, batched_predictions, original_predictions
     
 
 

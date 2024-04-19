@@ -26,6 +26,6 @@ class clip_classifier(nn.Module):
         inputs = {"pixel_values": images, "input_ids" :self.inputs_ids}
         outputs = self.clip_model(**inputs)
         logits_per_image = outputs.logits_per_image # this is the image-text similarity score
-        probs = logits_per_image
+        probs = logits_per_image.softmax(dim=-1)
         result = ImageClassifierOutput(logits=probs)
         return result

@@ -68,19 +68,31 @@ after loging into your account you are ready to run your first attack.
 For running an attack you will have to create a configuration file that will have the following structure. Remember to enable wandb for logging the results.
 
 ```yaml
+
 enable_wandb: True
+enable_gpu: true
 
 model:
-  name: 'VIT_model' 
+  name: 'ResNet18' #the Name you want to give to the model
   hugginface_model: "google/vit-base-patch16-224"
+  local_model_path: ""
   use_preprocessor: True
+  local_preprocessor: ""
+  enable_resize: True
   resize_size: 224
 
 dataset:
   train_on_dataset: True # If train on dataset is true it will use the true labels from the dataset. If it is set to False
                          # it will run the model with the images and generate pseudo labels to use for training.
   dataset_path: "mrm8488/ImageNet1K-val"
-  sample_number: 20  # Number of samples to use from the dataset for the evaluation
+  sample_number: 30  # Number of samples to use from the dataset for the evaluation
+  image_feature_title: "image" #Check on the specification of the dataset to see the name of the feature that contains the image
+  label_feature_title: "label"
+  
+
+
+embedding_models:
+  clip_model_enable : False
 
 
 attack:
@@ -94,6 +106,8 @@ one_pixel:
   steps: 10
   pixels : 1
   population_size: 100
+
+
 ```
 
 

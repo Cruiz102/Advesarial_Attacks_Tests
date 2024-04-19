@@ -12,7 +12,7 @@ from utils import read_yaml, getYAMLParameter, HugginfaceProcessorData
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 from logger import OnePixelLogger, CWLogger, PGDLogger
-from utils import plot_grid, getYAMLParameter, l2_distance, plot_image_comparison
+from utils import plot_grid, getYAMLParameter, l2_distance, plot_image_comparison, conf_matrix_img
 import tqdm
 import wandb
 import math
@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
 from clip_classifier import clip_classifier
+from image_net_classes import IMAGENET2012_CLASSES
 
 
 
@@ -81,6 +82,14 @@ def main():
     # Check if the dataset has a "label" column
 
     labels_names = dataset.features[label_feature_title].names
+
+    import re
+    # Check if the dataset is imagenet
+    imagenet_pattern = re.compile(r'imagenet', re.IGNORECASE)
+    is_imagenet = imagenet_pattern.search(hugginface_dataset_dir)
+    if is_imagenet:
+        print("'imagenet' was found.")
+        labels_names = [ IMAGENET2012_CLASSES[i] for i in labels_names ]
 
     
     if enable_wandb:
@@ -216,6 +225,7 @@ def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks =
         total_sucesses = 0
         total_og_sucesses = 0
         y_total_pred = torch.tensor([])
+        y_og_total_pred = torch.tensor([])
         attack.init_wandb()
         for batch in dataloader:
             images = batch[image_title]
@@ -224,45 +234,43 @@ def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks =
             batched_pred = batched_pred.cpu()
             original_pred = original_pred.detach().cpu()
 
-
             l2_distance_metric = l2_distance(batched_pred,images, adv_images, labels, device)
             wandb.log({"L2 Distance": l2_distance_metric})
 
+
             wandb.log({"Attacked_Batch_Accuracy": num_attack_sucesses/len(images)})
-            wandb.log({"Original_Batch Accuracy": total_og_sucesses/len(images) })
+            wandb.log({"Original_Batch Accuracy": num_og_sucesses/len(images) })
 
 
 
             y_total_pred = torch.cat((y_total_pred, batched_pred) )
+            y_og_total_pred = torch.cat((y_og_total_pred, original_pred) )
             total_sucesses += num_attack_sucesses
             total_og_sucesses += num_og_sucesses
 
             # Check if it's time to save grid images
             if batch_counter % save_interval == 0:
-                plot_image_comparison(images,adv_images,original_pred, batched_pred, labels, True, 4)
-                
-            
+                comparison_image = plot_image_comparison(images,adv_images,original_pred, batched_pred, labels, True, 4)
+                wandb.log({"Comparison Image": [wandb.Image(comparison_image)]})
             batch_counter += 1
 
-        print(y_total_pred.flatten().shape)
-        print(batched_pred.shape)
-        wandb.log({"Total Attack Successes Percentage": total_sucesses/ len(dataset)})
-        wandb.log({"Original_fails Percentage": total_og_sucesses/ len(dataset)})
-        # Step 5: Create and display the confusion matrix
-        conf_matrix = confusion_matrix(y_total_pred.flatten(), batch[label_title])
+        attacked_value = total_sucesses / len(dataset)  # Assuming total_sucesses and dataset are defined
+        original_value = total_og_sucesses / len(dataset)  # Assuming total_og_sucesses and dataset are defined
 
-        # Displaying the confusion matrix using seaborn for better visualization
-        plt.figure(figsize=(8, 6))
-        sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues")
-        plt.ylabel('Actual')
-        plt.xlabel('Predicted')
-        plt.title('Confusion Matrix')
-        # Save the plot to a file
-        filename = "confusion_matrix.png"
-        plt.savefig(filename)
+        # Create a wandb.Table with explicit columns
+        table = wandb.Table(columns=["Category", "Value"])
+
+        # Add data rows to the table
+        table.add_data("Attacked", attacked_value)
+        table.add_data("Original", original_value)
+
+        bar_chart = wandb.plot.bar(table, "Category", "Value", title="Total Successes Percentage")
+        wandb.log({"Total Successes Percentage": bar_chart})
+        #Create and display the confusion matrix
+        confusion_img = conf_matrix_img(y_total_pred.flatten(),y_og_total_pred.flatten())
 
         # Log the confusion matrix image file to wandb
-        wandb.log({"confusion_matrix": wandb.Image(filename)})
+        wandb.log({"confusion_matrix": wandb.Image(confusion_img)})
         wandb.finish()
 if __name__ == "__main__":
     main()

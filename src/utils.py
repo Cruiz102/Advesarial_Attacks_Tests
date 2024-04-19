@@ -17,10 +17,12 @@ import torchvision
 import torchvision.transforms as transforms
 import yaml
 from typing import Optional, Union, List, Dict, Any
-
+from io import BytesIO
 from PIL import Image
 import torch
 from torch.utils.data import Dataset
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
 
 
 class ClipDataset(Dataset):
@@ -175,40 +177,23 @@ def save_grid_images(images, rows, cols, experiment_name, output_dir='outputs'):
 
 
 def l2_distance(predicted_labels, images, adv_images, labels, device="cpu"):
+    predicted_labels = predicted_labels.to(device)
     corrects = (labels.to(device) == predicted_labels)
     delta = (adv_images - images.to(device)).view(len(images), -1)
     l2 = torch.norm(delta[~corrects], p=2, dim=1).mean()
+    print(f"L2 distance: {l2}")
     return l2
 
 # Code fro the robustbench utils 
-# https://github.com/RobustBench/robustbench/blob/master/robustbench/utils.py
-def clean_accuracy(
-                   predicted_y: torch.Tensor,
-                   real_y: torch.Tensor,
-                   batch_size: int = 100,
-                   device: torch.device = None):
-    if device is None:
-        device = x.device
-    acc = 0.
-    n_batches = math.ceil(x.shape[0] / batch_size)
-    with torch.no_grad():
-        for counter in range(n_batches):
-            x_curr = x[counter * batch_size:(counter + 1) *
-                       batch_size].to(device)
-            y_curr = y[counter * batch_size:(counter + 1) *
-                       batch_size].to(device)
-
-            output = model(x_curr)
-            acc += (output.max(1)[1] == y_curr).float().sum()
-
-    return acc.item() / x.shape[0]
-
 
 import matplotlib.pyplot as plt
 import numpy as np
 
+
 def plot_image_comparison(original_images, attacked_images, original_preds, attacked_preds, true_labels, highlight_misclass=False, pairs_per_row=2):
     assert len(original_images) == len(attacked_images) == len(original_preds) == len(attacked_preds) == len(true_labels), "All lists must have the same length."
+    original_images = original_images.permute(0, 2, 3, 1).cpu()  # Ensure the tensor is on CPU and permute
+    attacked_images = attacked_images.permute(0, 2, 3, 1).cpu()  # Ensure the tensor is on CPU and permute
     
     num_images = len(original_images)
     num_rows = (num_images + pairs_per_row - 1) // pairs_per_row  # Calculate number of rows needed
@@ -223,7 +208,7 @@ def plot_image_comparison(original_images, attacked_images, original_preds, atta
         
         # Plot original image
         ax = axes[row, col] if num_rows > 1 else axes[col]
-        orig_img = np.array(original_images[i])
+        orig_img = np.array(original_images[i])  # Already on CPU
         if highlight_misclass and original_preds[i] != true_labels[i]:
             orig_img = np.clip(orig_img * 0.7 + np.array([255, 0, 0])[None, None, :] * 0.3, 0, 255).astype(np.uint8)
             title_color = 'red'
@@ -235,7 +220,7 @@ def plot_image_comparison(original_images, attacked_images, original_preds, atta
         
         # Plot attacked image
         ax = axes[row, col + 1] if num_rows > 1 else axes[col + 1]
-        att_img = np.array(attacked_images[i])
+        att_img = np.array(attacked_images[i])  # Already on CPU
         if highlight_misclass and attacked_preds[i] != true_labels[i]:
             att_img = np.clip(att_img * 0.7 + np.array([255, 0, 0])[None, None, :] * 0.3, 0, 255).astype(np.uint8)
             title_color = 'red'
@@ -253,17 +238,36 @@ def plot_image_comparison(original_images, attacked_images, original_preds, atta
         axes[row, col + 1].axis('off')
     
     plt.tight_layout()
-    plt.show()
 
-# Example usage:
-# Assume you have loaded or generated the appropriate images and predictions
-# original_images, attacked_images = [your_images], [your_attacked_images]
-# original_preds, attacked_preds = [your_original_predictions], [your_attacked_predictions]
-# true_labels = [your_true_labels]
-# plot_image_comparison(original_images, attacked_images, original_preds, attacked_preds, true_labels, highlight_misclass=True)
+    # Convert figure to a PIL Image
+    buf = BytesIO()
+    fig.savefig(buf, format='png')
+    buf.seek(0)
+    img = Image.open(buf)
+    plt.close(fig)  # Close the figure to free memory
+
+    return img  # Return the PIL image
 
 
-    pass
+def conf_matrix_img(pred_labels, true_labels):
+    conf_matrix = confusion_matrix(pred_labels, true_labels)
+    # Displaying the confusion matrix using seaborn for better visualization
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues")
+    plt.ylabel('Actual')
+    plt.xlabel('Predicted')
+    plt.title('Confusion Matrix')
+
+    # Save the plot to a BytesIO buffer
+    buf = BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)  # Rewind the buffer to the beginning so it can be read
+    img = Image.open(buf)  # Create a PIL image from the buffer
+    plt.close()  # Close the plt figure to free memory
+    # Optionally, return the PIL image if you need to use it elsewhere
+    return img
+
+
 def embeddings_interpolation(pixel_value):
     """This function should use the patch interpolation
         for all VIT based models as a extra parameter.
