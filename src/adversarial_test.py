@@ -69,15 +69,22 @@ def main():
     embedding_dataset = getYAMLParameter(attacks_config, "embedding_models", "dataset")
     true_embeddings = None
     hugginface_dataset_dir = getYAMLParameter(attacks_config, "dataset", "dataset_path")
-    dataset = load_dataset(hugginface_dataset_dir) 
+    batch_size = getYAMLParameter(attacks_config, "model", "batch_size")
     sample_dataset_number = getYAMLParameter(attacks_config, "dataset", "sample_number")
     train_on_dataset = getYAMLParameter(attacks_config, "dataset", "train_on_dataset")
     image_feature_title  = getYAMLParameter(attacks_config, "dataset", "image_feature_title")
     label_feature_title = getYAMLParameter(attacks_config, "dataset", "label_feature_title")
+    random_seed = getYAMLParameter(attacks_config, "dataset", "random_seed")
+
+
+    dataset = load_dataset(hugginface_dataset_dir) 
 
     
     if sample_dataset_number:
-        dataset = dataset['train'].shuffle().select(range(sample_dataset_number))
+        if random_seed  > 0:
+            dataset = dataset['train'].shuffle(random_seed).select(range(sample_dataset_number))
+        else:
+            dataset = dataset['train'].shuffle().select(range(sample_dataset_number))
 
     # Check if the dataset has a "label" column
 
@@ -152,14 +159,14 @@ def main():
             # examples["attention_mask"] = inputs["attention_mask"]
             return examples
         
-        processed_dataset =  dataset.map(clip_preprocess, batched=True).with_format("torch").shuffle()
+        processed_dataset =  dataset.map(clip_preprocess, batched=True).with_format("torch")
     else:
         def preprocess_images(examples):
             # Process the images
             examples["pixel_values"] = image_processor(images=examples[image_feature_title], return_tensors="pt")["pixel_values"]
             return examples
         # Apply preprocessing
-        processed_dataset = dataset.map(preprocess_images, batched=True, ).with_format("torch").shuffle()
+        processed_dataset = dataset.map(preprocess_images, batched=True, ).with_format("torch")
 
     # from custom_models import DenseModel
     # model = DenseModel(224*224*3,300,500,1000)
@@ -170,6 +177,8 @@ def main():
         "population": population,
         "steps": onepixel_steps,
         "num_pixels": num_pixels,
+        "model_name": hugginface_dataset_dir,
+        "batch_size": batch_size,
         "attack": "one_pixel"
     }
         one_pixel_attack = OnePixelLogger(project_name= "one_pixel_attack",
@@ -189,7 +198,7 @@ def main():
         processed_dataset = HugginfaceProcessorData(processed_dataset, label_feature_title)
         test_attack(
         dataset=processed_dataset, 
-        batch_size=10, 
+        batch_size= batch_size, 
         output_dir="./results", 
         targeted=targeted,
         attacks=[one_pixel_attack], 
@@ -211,9 +220,10 @@ def main():
 
 
 def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks = [], device: str = "cpu"):
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size)
     image_title = dataset.image_feature_title
     label_title = dataset.label_title
+    used_labels = set()
 
     total_batches = len(dataloader)
     save_interval = max(1, math.ceil(total_batches / 10))  # Ensure at least 1 to avoid division by zero
@@ -226,13 +236,25 @@ def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks =
         total_og_sucesses = 0
         y_total_pred = torch.tensor([])
         y_og_total_pred = torch.tensor([])
+        y_total_labels = torch.tensor([])
+        logits_attack_total = torch.tensor([])
         attack.init_wandb()
         for batch in dataloader:
+
             images = batch[image_title]
             labels = batch[label_title]
             adv_images, num_attack_sucesses,num_og_sucesses, batched_pred, original_pred = attack(images,labels)
             batched_pred = batched_pred.cpu()
             original_pred = original_pred.detach().cpu()
+
+
+            # Save the used labels
+            for  i in labels:
+                used_labels.add(i.item())
+
+
+
+
 
             l2_distance_metric = l2_distance(batched_pred,images, adv_images, labels, device)
             wandb.log({"L2 Distance": l2_distance_metric})
@@ -245,6 +267,10 @@ def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks =
 
             y_total_pred = torch.cat((y_total_pred, batched_pred) )
             y_og_total_pred = torch.cat((y_og_total_pred, original_pred) )
+            y_total_labels = torch.cat((y_total_labels, labels))
+
+            # TODO: Implement this to have an ROC curve
+            # logits_attack = torch.cat(logits_attack_total, logits_attk.view(logits_attk.shape[1], -1), dim=1)
             total_sucesses += num_attack_sucesses
             total_og_sucesses += num_og_sucesses
 
@@ -267,10 +293,23 @@ def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks =
         bar_chart = wandb.plot.bar(table, "Category", "Value", title="Total Successes Percentage")
         wandb.log({"Total Successes Percentage": bar_chart})
         #Create and display the confusion matrix
-        confusion_img = conf_matrix_img(y_total_pred.flatten(),y_og_total_pred.flatten())
-
+        confusion_img_attk = conf_matrix_img(y_total_pred.flatten(),y_total_labels.flatten())
+        confusion_img_og = conf_matrix_img(y_og_total_pred.flatten(),y_total_labels.flatten())
         # Log the confusion matrix image file to wandb
-        wandb.log({"confusion_matrix": wandb.Image(confusion_img)})
+        wandb.log({"confusion_matrix_attacked_images": wandb.Image(confusion_img_attk)})
+        wandb.log({"confusion_matrix_original_images": wandb.Image(confusion_img_og)})
+
+
+
+        # # ROC Curve
+        # wandb.log({"ROC Curve Attacked" : wandb.plot.roc_curve(y_total_labels.flatten(),
+        #                          logits_attack, labels=list(used_labels))})
+                                 
+
+
+
+
+        wandb.log()
         wandb.finish()
 if __name__ == "__main__":
     main()
