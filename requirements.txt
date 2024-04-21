@@ -5,8 +5,8 @@ pandas>=1.2.4
 numpy>=1.19.4
 torchattacks
 transformers
+datasets
 wandb
 rai-toolbox
 accelerate
-deepspeed
 huggingface_hub

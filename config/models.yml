@@ -1,6 +1,5 @@
+vit:
+  positional_enconding_interpolation: true
 
- hugginface_model: ViTForImageClassification
- model_name: google/vit-base-patch16-224
-
-
- 
+dino:
+  return_attention: True
