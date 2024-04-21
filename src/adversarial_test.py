@@ -12,7 +12,7 @@ from utils import read_yaml, getYAMLParameter, HugginfaceProcessorData
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 from logger import OnePixelLogger, CWLogger, PGDLogger
-from utils import plot_grid, getYAMLParameter, l2_distance, plot_image_comparison, conf_matrix_img
+from utils import plot_grid, getYAMLParameter, l2_distance, plot_image_comparison, conf_matrix_img, count_parameters
 import tqdm
 import wandb
 import math
@@ -148,9 +148,12 @@ def main():
 
 
     if clip_enable:
-        model  = clip_classifier(clip_model_name="openai/clip-vit-base-patch32",
+        print("Loading CLIP model")
+        hugginface_model = "openai/clip-vit-base-patch32"
+        model  = clip_classifier(clip_model_name=hugginface_model,
                                   labels_name=labels_names, device = device)
-        image_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        image_processor = CLIPProcessor.from_pretrained(hugginface_model)
+        
         def clip_preprocess(examples):
             # Process the images
             inputs = image_processor( images=examples[image_feature_title], return_tensors="pt",padding = True).data
@@ -162,9 +165,10 @@ def main():
         processed_dataset =  dataset.map(clip_preprocess, batched=True).with_format("torch")
     else:
         def preprocess_images(examples):
-            # Process the images
-            examples["pixel_values"] = image_processor(images=examples[image_feature_title], return_tensors="pt")["pixel_values"]
-            return examples
+                    # Process the images
+                    images = [image.convert('RGB') for image in examples['image']] 
+                    examples["pixel_values"] = image_processor(images=images, padding = True)["pixel_values"]
+                    return examples
         # Apply preprocessing
         processed_dataset = dataset.map(preprocess_images, batched=True, ).with_format("torch")
 
@@ -177,7 +181,9 @@ def main():
         "population": population,
         "steps": onepixel_steps,
         "num_pixels": num_pixels,
-        "model_name": hugginface_dataset_dir,
+        "dataset": hugginface_dataset_dir,
+        "model_name": hugginface_model,
+        "parameter_count": count_parameters(model),
         "batch_size": batch_size,
         "attack": "one_pixel"
     }
@@ -276,7 +282,7 @@ def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks =
 
             # Check if it's time to save grid images
             if batch_counter % save_interval == 0:
-                comparison_image = plot_image_comparison(images,adv_images,original_pred, batched_pred, labels, True, 4)
+                comparison_image = plot_image_comparison(images,adv_images,original_pred, batched_pred, labels, False, 4)
                 wandb.log({"Comparison Image": [wandb.Image(comparison_image)]})
             batch_counter += 1
 
@@ -305,11 +311,6 @@ def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks =
         # wandb.log({"ROC Curve Attacked" : wandb.plot.roc_curve(y_total_labels.flatten(),
         #                          logits_attack, labels=list(used_labels))})
                                  
-
-
-
-
-        wandb.log()
         wandb.finish()
 if __name__ == "__main__":
     main()

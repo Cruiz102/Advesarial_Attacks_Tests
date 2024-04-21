@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.optim.optimizer as optim
 import numpy as np
-from  transformers.modeling_outputs import ImageClassifierOutput
+from  transformers.modeling_outputs import ImageClassifierOutput, ImageClassifierOutputWithNoAttention
 from typing import Tuple
 from utils import  l2_distance
 import matplotlib.pyplot as plt
@@ -30,7 +30,7 @@ class AttackLogger:
     def init_wandb(self):
         # Initialize wandb run
         wandb.init(project=self.project_name,
-                   name=self.wandb_config["attack"],
+                   name=self.wandb_config["attack"] + "-" + self.wandb_config["model_name"],
                    config = self.wandb_config)
 
 
@@ -49,7 +49,7 @@ class OnePixelLogger(ta.OnePixel, AttackLogger):
             outs = []
             for batch in batches:
                 out = self.get_logits(batch)
-                if isinstance(out, ImageClassifierOutput):
+                if isinstance(out, ImageClassifierOutput) or isinstance(out,ImageClassifierOutputWithNoAttention ):
                     out = out.logits
                 outs.append(out)
         outs = torch.cat(outs)

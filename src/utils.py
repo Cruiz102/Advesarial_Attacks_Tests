@@ -190,52 +190,60 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+def ensure_uint8(img):
+    # Check if the input is a PyTorch tensor and if it's on a GPU
+    if isinstance(img, torch.Tensor):
+        # Move tensor to CPU if it's not already
+        img = img.cpu().numpy()
+    else:
+        img = np.array(img)  # Convert to numpy array if it's not already
+
+    # Permute the dimensions if the image is in CHW format (PyTorch) instead of HWC (Matplotlib)
+    if img.ndim == 3 and img.shape[0] in [1, 3]:  # Check for grayscale (1 channel) or RGB (3 channels)
+        img = img.transpose(1, 2, 0)  # Convert CHW to HWC
+    
+    # Ensure the image data type is uint8 and in the correct range [0, 255]
+    if img.dtype == np.float32 or img.dtype == np.float64:
+        # Assume float images are in the range [0, 1] and scale to [0, 255]
+        img = np.clip(img * 255, 0, 255).astype(np.uint8)
+    elif img.dtype != np.uint8:
+        # Clip and convert any other types to uint8
+        img = np.clip(img, 0, 255).astype(np.uint8)
+    return img
+def apply_highlight(img, pred, true_label):
+    # Apply red tint to the image if the prediction does not match the true label
+    if pred != true_label:
+        img = np.clip(img * 0.7 + np.array([255, 0, 0], dtype=np.uint8)[None, None, :] * 0.3, 0, 255).astype(np.uint8)
+    return img
+
 def plot_image_comparison(original_images, attacked_images, original_preds, attacked_preds, true_labels, highlight_misclass=False, pairs_per_row=2):
     assert len(original_images) == len(attacked_images) == len(original_preds) == len(attacked_preds) == len(true_labels), "All lists must have the same length."
-    original_images = original_images.permute(0, 2, 3, 1).cpu()  # Ensure the tensor is on CPU and permute
-    attacked_images = attacked_images.permute(0, 2, 3, 1).cpu()  # Ensure the tensor is on CPU and permute
-    
     num_images = len(original_images)
     num_rows = (num_images + pairs_per_row - 1) // pairs_per_row  # Calculate number of rows needed
-    fig, axes = plt.subplots(nrows=num_rows, ncols=2 * pairs_per_row, figsize=(4 * pairs_per_row, 2 * num_rows))  # Adjust figure size accordingly
-    
-    if num_images == 1 or num_rows == 1:
-        axes = np.expand_dims(axes, 0)  # Handle the case of 1 image or 1 row
-    
+    fig, axes = plt.subplots(nrows=num_rows, ncols=2 * pairs_per_row, figsize=(4 * pairs_per_row, 2 * num_rows))
+    axes = np.atleast_2d(axes)  # Ensure axes is always a 2D array
+
     for i in range(num_images):
         row = i // pairs_per_row
         col = (i % pairs_per_row) * 2  # Each pair takes 2 columns in the grid
         
-        # Plot original image
-        ax = axes[row, col] if num_rows > 1 else axes[col]
-        orig_img = np.array(original_images[i])  # Already on CPU
-        if highlight_misclass and original_preds[i] != true_labels[i]:
-            orig_img = np.clip(orig_img * 0.7 + np.array([255, 0, 0])[None, None, :] * 0.3, 0, 255).astype(np.uint8)
-            title_color = 'red'
-        else:
-            title_color = 'black'
+        # Prepare and display original image
+        orig_img = ensure_uint8(np.array(original_images[i]))
+        if highlight_misclass:
+            orig_img = apply_highlight(orig_img, original_preds[i], true_labels[i])
+        ax = axes[row, col]
         ax.imshow(orig_img, interpolation='nearest')
-        ax.set_title(f'Orig\nPred: {original_preds[i]}, True: {true_labels[i]}', color=title_color)
+        ax.set_title(f'Orig\nPred: {original_preds[i]}, True: {true_labels[i]}', color='red' if original_preds[i] != true_labels[i] else 'black')
         ax.axis('off')
         
-        # Plot attacked image
-        ax = axes[row, col + 1] if num_rows > 1 else axes[col + 1]
-        att_img = np.array(attacked_images[i])  # Already on CPU
-        if highlight_misclass and attacked_preds[i] != true_labels[i]:
-            att_img = np.clip(att_img * 0.7 + np.array([255, 0, 0])[None, None, :] * 0.3, 0, 255).astype(np.uint8)
-            title_color = 'red'
-        else:
-            title_color = 'black'
+        # Prepare and display attacked image
+        att_img = ensure_uint8(attacked_images[i])
+        if highlight_misclass:
+            att_img = apply_highlight(att_img, attacked_preds[i], true_labels[i])
+        ax = axes[row, col + 1]
         ax.imshow(att_img, interpolation='nearest')
-        ax.set_title(f'Att\nPred: {attacked_preds[i]}, True: {true_labels[i]}', color=title_color)
+        ax.set_title(f'Att\nPred: {attacked_preds[i]}, True: {true_labels[i]}', color='red' if attacked_preds[i] != true_labels[i] else 'black')
         ax.axis('off')
-    
-    # Hide unused axes if the grid does not fill up completely
-    for j in range(i + 1, num_rows * pairs_per_row):
-        row = j // pairs_per_row
-        col = (j % pairs_per_row) * 2
-        axes[row, col].axis('off')
-        axes[row, col + 1].axis('off')
     
     plt.tight_layout()
 
@@ -266,6 +274,22 @@ def conf_matrix_img(pred_labels, true_labels):
     plt.close()  # Close the plt figure to free memory
     # Optionally, return the PIL image if you need to use it elsewhere
     return img
+
+
+
+import torch.nn as nn
+
+def count_parameters(model):
+    """
+    Counts the total number of parameters in a PyTorch model.
+
+    Args:
+    model (nn.Module): The PyTorch model.
+
+    Returns:
+    int: Total number of trainable and non-trainable parameters.
+    """
+    return sum(p.numel() for p in model.parameters())
 
 
 def embeddings_interpolation(pixel_value):
