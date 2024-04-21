@@ -12,29 +12,6 @@ This project focuses on testing adversarial attacks across various models and da
  - Live Inference Script: Includes a script for real-time model inference using a webcam, allowing for dynamic testing environments.
 
 
-### Using Accelerate 
-
-Accelerate is a very easy to use framework for optimizing the training Models on efficient training pipelines.
-For using accelerate make sure to install it with pip3 install accelerate.
-
-Before running accelerate with the Hugginface Trainer you first have to configure your training pipeline by running:
-```bash
-accelerate config
-```
-
-### Contributing
----
-In general we would want for the project to have the following things , so any contributions to this areas will be well welcome.
-
-- Configuration Flexibility: Aim to enhance project configurability using files like YAML, making it easily adaptable for different users and scenarios.
-
-- Feature Enhancements: Contributions that introduce new functionalities or features to improve adversarial attack testing are highly encouraged. Feel free to create an issue to discuss your ideas.
-
-
-Exporting TensorRT engine.
-
-For exporting a trt model and use it in the live_inference script you first must ensure that you  have CUDA and tensorRT installed in your machine.
-
 # Getting Started:
  To run this repository you will need first to install python and their dependencies.
 
@@ -122,3 +99,29 @@ After configuring your yaml file with the models, dataset and hyperparameters yo
 python3 src/attack_test.py 
 ```
 Congratulations you are now running your first attack, you will see in you terminal how the attack is being trained. After finishing the attack you will see the results in your wandb account.
+
+
+
+
+### Using Accelerate 
+
+Accelerate is a very easy to use framework for optimizing the training Models on efficient training pipelines.
+For using accelerate make sure to install it with pip3 install accelerate.
+
+Before running accelerate with the Hugginface Trainer you first have to configure your training pipeline by running:
+```bash
+accelerate config
+```
+
+### Contributing
+---
+In general we would want for the project to have the following things , so any contributions to this areas will be well welcome.
+
+- Configuration Flexibility: Aim to enhance project configurability using files like YAML, making it easily adaptable for different users and scenarios.
+
+- Feature Enhancements: Contributions that introduce new functionalities or features to improve adversarial attack testing are highly encouraged. Feel free to create an issue to discuss your ideas.
+
+
+Exporting TensorRT engine.
+
+For exporting a trt model and use it in the live_inference script you first must ensure that you  have CUDA and tensorRT installed in your machine.
