@@ -71,7 +71,7 @@ def main():
     hugginface_dataset_dir = getYAMLParameter(attacks_config, "dataset", "dataset_path")
     batch_size = getYAMLParameter(attacks_config, "model", "batch_size")
     sample_dataset_number = getYAMLParameter(attacks_config, "dataset", "sample_number")
-    train_on_dataset = getYAMLParameter(attacks_config, "dataset", "train_on_dataset")
+    train_on_dataset = True  # temporaly false 
     image_feature_title  = getYAMLParameter(attacks_config, "dataset", "image_feature_title")
     label_feature_title = getYAMLParameter(attacks_config, "dataset", "label_feature_title")
     random_seed = getYAMLParameter(attacks_config, "dataset", "random_seed")
@@ -152,6 +152,8 @@ def main():
     # PGD Parameters
     enable_PGD = getYAMLParameter(attacks_config, "PGD", "enable_attack")
     steps_pgd = getYAMLParameter(attacks_config, "PGD", "steps")
+    alpha_pgd = getYAMLParameter(attacks_config, "PGD", "alpha")
+    epsilon_pgd = getYAMLParameter(attacks_config, "PGD", "epsilon")
         
 
 
@@ -231,9 +233,27 @@ def main():
     if enable_cw:
         cw_attack = (enable_cw, CWLogger(model=model, steps=steps_cw, kappa=kappa_cw))
 
-    if enable_PGD:
-        pgd_attack = (enable_PGD, PGDLogger(model, steps=steps_pgd))
 
+    if enable_PGD:
+        wandb_config_pgd = {
+            "targeted": targeted,
+            "targeted_labels": targeted_labels,
+            "dataset": hugginface_dataset_dir,
+            "model_name": hugginface_model,
+            "epsilon": epsilon_pgd,
+            "alpha": alpha_pgd,
+            "steps": steps_pgd,
+            "parameter_count": count_parameters(model),
+            "batch_size": batch_size,
+            "attack": "PGD"
+        }
+        pgd_attack = (enable_PGD, PGDLogger(
+            project_name="PGD_attack",
+            model=model,
+            wandb_config=wandb_config_pgd,
+            eps=epsilon_pgd,
+            alpha=alpha_pgd,
+            steps=steps_pgd))
 
 
 

@@ -51,7 +51,6 @@ pip3 install -r requirements.txt
 ```
 
 ## Testing Adversarial Attacks
-(Disclaimer it could still have some issues. SORRY. Im going to fix the bugs and problems soon :))
 
 For now if you want to see the results of running the adversarial attacks you will need to use Weight and Biases and and sign up with your account.
 
@@ -65,58 +64,61 @@ wandb login
 
 after loging into your account you are ready to run your first attack.
 
-For running an attack you will have to create a configuration file that will have the following structure. Remember to enable wandb for logging the results.
+For running an attack you will have to create an configuration file that will have the information of the attacks you want to execute. This file should be named `config.yml` and must be inside the `config` folder. The following is the default example to try out the tool.
 
 ```yaml
-
-enable_wandb: True
 enable_gpu: true
 
 model:
-  name: 'ResNet18' #the Name you want to give to the model
-  hugginface_model: "google/vit-base-patch16-224"
-  local_model_path: ""
-  use_preprocessor: True
-  local_preprocessor: ""
-  enable_resize: True
-  resize_size: 224
+  name: 'Resnet Microsoft' #the Name you want to give to the model
+  hugginface_model: "microsoft/resnet-50"
+  batch_size : 16 # Batch size for trainin. If you have problems with memory, you can use a lower batch size.
 
 dataset:
-  train_on_dataset: True # If train on dataset is true it will use the true labels from the dataset. If it is set to False
-                         # it will run the model with the images and generate pseudo labels to use for training.
   dataset_path: "mrm8488/ImageNet1K-val"
-  sample_number: 30  # Number of samples to use from the dataset for the evaluation
+  sample_number: 50  # Number of samples to use from the dataset for the evaluation
+  random_seed: 2 # If you want  perform the test with the same data each time, set a random seed not equal to 0.
   image_feature_title: "image" #Check on the specification of the dataset to see the name of the feature that contains the image
   label_feature_title: "label"
   
 
 
 embedding_models:
+#  Only enable this one if you want to use the CLIP model.
+# The model_name specified in the model category will not be used.
   clip_model_enable : False
 
-
-attack:
-  targeted: False
-  target_list: [(),()] 
-  
-  
-
 one_pixel:
-  enable_attack: True
-  steps: 10
+  enable_attack: False
+  steps: 20
   pixels : 1
   population_size: 100
 
+FGSM:
+  enable_attack: True
+  epsilon: 0.005
+
+PGD:
+  enable_attack: False
+  epsilon: 0.3
+  alpha: 0.1
+  steps: 100
+
+carlini_weiner:
+  enable_attack: False
+  kappa: 0.01
+  steps: 10000 
+
+
+
 
 ```
 
-
-After configuring your yaml file with the models, dataset and hyperparameters you want to use  the next step is to run the script for runnning the attacks.
+# Run the Attacks
+After configuring your yaml file with the models, dataset and hyperparameters you want to use  the next step to run the attacks.
 
 
 ```bash
-python3 attack_test.py --config_path=config.yaml
+python3 src/attack_test.py 
 ```
-
-
 Congratulations you are now running your first attack, you will see in you terminal how the attack is being trained. After finishing the attack you will see the results in your wandb account.

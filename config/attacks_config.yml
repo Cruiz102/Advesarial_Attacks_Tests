@@ -1,39 +1,24 @@
 
-enable_wandb: True
 enable_gpu: true
 
 model:
   name: 'Resnet Microsoft' #the Name you want to give to the model
   hugginface_model: "microsoft/resnet-50"
-  batch_size : 16 # Batch size for trainin. If you have problems with memory, you can use a lower batch size
-
-  local_model_path: ""
-  use_preprocessor: True
-  local_preprocessor: ""
-  enable_resize: True
-  resize_size: 224
+  batch_size : 16 # Batch size for trainin. If you have problems with memory, you can use a lower batch size.
 
 dataset:
-  train_on_dataset: True # If train on dataset is true it will use the true labels from the dataset. If it is set to False
-                         # it will run the model with the images and generate pseudo labels to use for training.
   dataset_path: "mrm8488/ImageNet1K-val"
   sample_number: 50  # Number of samples to use from the dataset for the evaluation
-  random_seed: 2 # IF you want t perform the test with the same data each time, set a random seed not equal to 0.
+  random_seed: 2 # If you want  perform the test with the same data each time, set a random seed not equal to 0.
   image_feature_title: "image" #Check on the specification of the dataset to see the name of the feature that contains the image
   label_feature_title: "label"
   
 
 
 embedding_models:
+#  Only enable this one if you want to use the CLIP model.
+# The model_name specified in the model category will not be used.
   clip_model_enable : False
-
-
-attack:
-  targeted: False
-  highlight_effective_attack: True
-  target_list: [(),()] 
-  
-  
 
 one_pixel:
   enable_attack: False
@@ -41,30 +26,20 @@ one_pixel:
   pixels : 1
   population_size: 100
 
-
-
 FGSM:
   enable_attack: True
-  epsilon: 0.00005
-  load_attack: "path"
+  epsilon: 0.005
 
-
-
-
-
-
+PGD:
+  enable_attack: False
+  epsilon: 0.3
+  alpha: 0.1
+  steps: 100
 
 carlini_weiner:
   enable_attack: False
   kappa: 0.01
   steps: 10000 
-  load_attack: "path"
-
-
-PGD:
-  enable_attack: False
-  steps: 10000
-  load_attack: "path"
 
 
 

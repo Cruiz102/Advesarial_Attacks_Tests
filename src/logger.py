@@ -204,6 +204,73 @@ class FGSMLogger(ta.FGSM, AttackLogger):
 
         num_sucesses, num_og_sucesses,batched_predictions, original_predictions = self.get_accuracy(images,adv_images, labels)
         return adv_images, num_sucesses,num_og_sucesses, batched_predictions, original_predictions
+    
+
+
+class PGDLogger(ta.PGD, AttackLogger):
+    def __init__(self, project_name,model,wandb_config= None, eps=8 / 255, alpha=2 / 255, steps=10, *args, **kwargs):
+        AttackLogger.__init__(self, project_name=project_name, wandb_config=wandb_config)
+        # Initialize the ta.PGD base class
+        ta.PGD.__init__(self, model=model, eps=eps, alpha=alpha, steps=steps, *args, **kwargs)
+
+    def get_logits(self, inputs, labels=None, *args, **kwargs):
+        if self._normalization_applied is False:
+            inputs = self.normalize(inputs)
+        logits = self.model(inputs)
+        if isinstance(logits, ImageClassifierOutput) or isinstance(logits,ImageClassifierOutputWithNoAttention ):
+            logits = logits.logits
+        return logits
+
+    def forward(self, images, labels):
+            r"""
+            Overridden.
+            """
+
+            images = images.clone().detach().to(self.device)
+            labels = labels.clone().detach().to(self.device)
+
+            if self.targeted:
+                target_labels = self.get_target_label(images, labels)
+
+            loss = nn.CrossEntropyLoss()
+            adv_images = images.clone().detach()
+
+            if self.random_start:
+                # Starting at a uniformly random point
+                adv_images = adv_images + torch.empty_like(adv_images).uniform_(
+                    -self.eps, self.eps
+                )
+                adv_images = torch.clamp(adv_images, min=0, max=1).detach()
+
+            for _ in range(self.steps):
+                adv_images.requires_grad = True
+                outputs = self.get_logits(adv_images)
+                if type(outputs) == ImageClassifierOutput:
+                    outputs = outputs.logits
+                # Calculate loss
+                if self.targeted:
+                    cost = -loss(outputs, target_labels)
+                else:
+                    cost = loss(outputs, labels)
+
+                wandb.log({"loss": cost.item()})
+                # Update adversarial images
+                grad = torch.autograd.grad(
+                    cost, adv_images, retain_graph=False, create_graph=False
+                )[0]
+
+                adv_images = adv_images.detach() + self.alpha * grad.sign()
+                delta = torch.clamp(adv_images - images, min=-self.eps, max=self.eps)
+                adv_images = torch.clamp(images + delta, min=0, max=1).detach()
+
+
+            num_sucesses, num_og_sucesses,batched_predictions, original_predictions = self.get_accuracy(images,adv_images, labels)
+            return adv_images, num_sucesses,num_og_sucesses, batched_predictions, original_predictions
+        
+
+    
+
+
 
 class CWLogger(ta.CW, AttackLogger):
     def __init__(self, *args, **kwargs):
@@ -282,54 +349,3 @@ class CWLogger(ta.CW, AttackLogger):
 
         return best_adv_images
     
-
-
-class PGDLogger(ta.PGD, AttackLogger):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def forward(self, images, labels):
-            r"""
-            Overridden.
-            """
-
-            images = images.clone().detach().to(self.device)
-            labels = labels.clone().detach().to(self.device)
-
-            if self.targeted:
-                target_labels = self.get_target_label(images, labels)
-
-            loss = nn.CrossEntropyLoss()
-            adv_images = images.clone().detach()
-
-            if self.random_start:
-                # Starting at a uniformly random point
-                adv_images = adv_images + torch.empty_like(adv_images).uniform_(
-                    -self.eps, self.eps
-                )
-                adv_images = torch.clamp(adv_images, min=0, max=1).detach()
-
-            for _ in range(self.steps):
-                adv_images.requires_grad = True
-                outputs = self.get_logits(adv_images)
-                if type(outputs) == ImageClassifierOutput:
-                    outputs = outputs.logits
-                # Calculate loss
-                if self.targeted:
-                    cost = -loss(outputs, target_labels)
-                else:
-                    cost = loss(outputs, labels)
-
-                # Update adversarial images
-                grad = torch.autograd.grad(
-                    cost, adv_images, retain_graph=False, create_graph=False
-                )[0]
-
-                adv_images = adv_images.detach() + self.alpha * grad.sign()
-                delta = torch.clamp(adv_images - images, min=-self.eps, max=self.eps)
-                adv_images = torch.clamp(images + delta, min=0, max=1).detach()
-
-
-            return adv_images
-    
-
