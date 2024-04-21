@@ -32,6 +32,30 @@ class AttackLogger:
         wandb.init(project=self.project_name,
                    name=self.wandb_config["attack"] + "-" + self.wandb_config["model_name"],
                    config = self.wandb_config)
+        
+
+    def get_logits(self, inputs, labels=None, *args, **kwargs):
+        if self._normalization_applied is False:
+            inputs = self.normalize(inputs)
+        logits = self.model(inputs)
+        if isinstance(logits, ImageClassifierOutput) or isinstance(logits,ImageClassifierOutputWithNoAttention ):
+            logits = logits.logits
+        return logits
+    
+
+    def get_accuracy(self, images,adv_images, labels):
+        batched_predictions = self.model(adv_images).logits.argmax(dim=1)
+        original_predictions = self.model(images).logits.argmax(dim=1)
+        adv_accurary = batched_predictions == labels
+        num_sucesses = adv_accurary.sum().item()
+        original_accuracy = original_predictions == labels
+        num_og_sucesses = original_accuracy.sum().item()
+
+        return num_sucesses,num_og_sucesses, batched_predictions, original_predictions
+
+    def forward(self, images, labels):
+        "This function should alwyays return the  following information"
+        pass
 
 
 
@@ -42,6 +66,13 @@ class OnePixelLogger(ta.OnePixel, AttackLogger):
         # Forward arguments to the Parent class
         super().__init__(model=model,*args, **kwargs)
     # Wrap the attack call with tqdm for a progress bar
+    def get_logits(self, inputs, labels=None, *args, **kwargs):
+        if self._normalization_applied is False:
+            inputs = self.normalize(inputs)
+        logits = self.model(inputs)
+        if isinstance(logits, ImageClassifierOutput) or isinstance(logits,ImageClassifierOutputWithNoAttention ):
+            logits = logits.logits
+        return logits
         
     def _get_prob(self, images):
         with torch.no_grad():
@@ -49,8 +80,6 @@ class OnePixelLogger(ta.OnePixel, AttackLogger):
             outs = []
             for batch in batches:
                 out = self.get_logits(batch)
-                if isinstance(out, ImageClassifierOutput) or isinstance(out,ImageClassifierOutputWithNoAttention ):
-                    out = out.logits
                 outs.append(out)
         outs = torch.cat(outs)
         return outs.detach().cpu().numpy()
@@ -116,18 +145,65 @@ class OnePixelLogger(ta.OnePixel, AttackLogger):
             adv_images.append(adv_image)
         adv_images = torch.cat(adv_images)
     #  Get the label from batched prediction with the hisgtest probability
-        batched_predictions = self.model(adv_images).logits.argmax(dim=1)
-        original_predictions = self.model(images).logits.argmax(dim=1)
-        adv_accurary = batched_predictions == labels
-        num_sucesses = adv_accurary.sum().item()
-        original_accuracy = original_predictions == labels
-        num_og_sucesses = original_accuracy.sum().item()
 
-
-
+        num_sucesses, num_og_sucesses,batched_predictions, original_predictions = self.get_accuracy(images,adv_images, labels)
         return adv_images, num_sucesses,num_og_sucesses, batched_predictions, original_predictions
-    
 
+
+
+
+
+
+class FGSMLogger(ta.FGSM, AttackLogger):
+
+    def __init__(self,project_name,model,wandb_config=None, eps=8 / 255, *args, **kwargs):
+        super().__init__("FGSM", model)
+        self.eps = eps
+        self.supported_mode = ["default", "targeted"]
+        AttackLogger.__init__(self, project_name=project_name, wandb_config=wandb_config)
+        # Forward arguments to the Parent class
+        super().__init__(model=model,eps=eps, *args, **kwargs)
+
+    def get_logits(self, inputs, labels=None, *args, **kwargs):
+        if self._normalization_applied is False:
+            inputs = self.normalize(inputs)
+        logits = self.model(inputs)
+        if isinstance(logits, ImageClassifierOutput) or isinstance(logits,ImageClassifierOutputWithNoAttention ):
+            logits = logits.logits
+        return logits
+
+    def forward(self, images, labels):
+        r"""
+        Overridden.
+        """
+
+        images = images.clone().detach().to(self.device)
+        labels = labels.clone().detach().to(self.device)
+
+        if self.targeted:
+            target_labels = self.get_target_label(images, labels)
+
+        loss = nn.CrossEntropyLoss()
+
+        images.requires_grad = True
+        outputs = self.get_logits(images)
+
+        # Calculate loss
+        if self.targeted:
+            cost = -loss(outputs, target_labels)
+        else:
+            cost = loss(outputs, labels)
+
+        # Update adversarial images
+        grad = torch.autograd.grad(
+            cost, images, retain_graph=False, create_graph=False
+        )[0]
+
+        adv_images = images + self.eps * grad.sign()
+        adv_images = torch.clamp(adv_images, min=0, max=1).detach()
+
+        num_sucesses, num_og_sucesses,batched_predictions, original_predictions = self.get_accuracy(images,adv_images, labels)
+        return adv_images, num_sucesses,num_og_sucesses, batched_predictions, original_predictions
 
 class CWLogger(ta.CW, AttackLogger):
     def __init__(self, *args, **kwargs):
@@ -253,4 +329,7 @@ class PGDLogger(ta.PGD, AttackLogger):
                 delta = torch.clamp(adv_images - images, min=-self.eps, max=self.eps)
                 adv_images = torch.clamp(images + delta, min=0, max=1).detach()
 
+
             return adv_images
+    
+

@@ -4,7 +4,7 @@ enable_gpu: true
 
 model:
   name: 'Resnet Microsoft' #the Name you want to give to the model
-  hugginface_model: "microsoft/resnet-18"
+  hugginface_model: "microsoft/resnet-50"
   batch_size : 16 # Batch size for trainin. If you have problems with memory, you can use a lower batch size
 
   local_model_path: ""
@@ -30,15 +30,25 @@ embedding_models:
 
 attack:
   targeted: False
+  highlight_effective_attack: True
   target_list: [(),()] 
   
   
 
 one_pixel:
-  enable_attack: True
+  enable_attack: False
   steps: 20
   pixels : 1
   population_size: 100
+
+
+
+FGSM:
+  enable_attack: True
+  epsilon: 0.00005
+  load_attack: "path"
+
+
 
 
 
@@ -56,11 +66,5 @@ PGD:
   steps: 10000
   load_attack: "path"
 
-
-FGSM:
-  enable_attack: True
-  epsilon: 0.3
-  steps: 10000
-  load_attack: "path"
 
 

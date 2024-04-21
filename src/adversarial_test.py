@@ -11,7 +11,7 @@ from transformers import CLIPProcessor, CLIPModel
 from utils import read_yaml, getYAMLParameter, HugginfaceProcessorData
 from datasets import load_dataset
 from torch.utils.data import DataLoader
-from logger import OnePixelLogger, CWLogger, PGDLogger
+from logger import OnePixelLogger, CWLogger, PGDLogger,  FGSMLogger
 from utils import plot_grid, getYAMLParameter, l2_distance, plot_image_comparison, conf_matrix_img, count_parameters
 import tqdm
 import wandb
@@ -75,6 +75,9 @@ def main():
     image_feature_title  = getYAMLParameter(attacks_config, "dataset", "image_feature_title")
     label_feature_title = getYAMLParameter(attacks_config, "dataset", "label_feature_title")
     random_seed = getYAMLParameter(attacks_config, "dataset", "random_seed")
+
+
+    highlight_enable = getYAMLParameter(attacks_config, "attack", "highlight_effective_attack")
 
 
     dataset = load_dataset(hugginface_dataset_dir) 
@@ -141,6 +144,11 @@ def main():
     steps_cw = getYAMLParameter(attacks_config, "carlini_wiener", "steps")
     kappa_cw = getYAMLParameter(attacks_config, "carlini_wiener", "kappa")
 
+
+    # FGSM Parameters
+    enable_FGSM = getYAMLParameter(attacks_config, "FGSM", "enable_attack")
+    epsilon_fgsm = getYAMLParameter(attacks_config, "FGSM", "epsilon")
+
     # PGD Parameters
     enable_PGD = getYAMLParameter(attacks_config, "PGD", "enable_attack")
     steps_pgd = getYAMLParameter(attacks_config, "PGD", "steps")
@@ -174,6 +182,11 @@ def main():
 
     # from custom_models import DenseModel
     # model = DenseModel(224*224*3,300,500,1000)
+
+    one_pixel_attack = (False, None)
+    fgsm_attack = (False, None)
+    cw_attack = (False, None)
+    pgd_attack = (False, None)
     if enable_one_pixel_attack:
         wandb_config_one_pixel = {
         "targeted": targeted,
@@ -187,49 +200,69 @@ def main():
         "batch_size": batch_size,
         "attack": "one_pixel"
     }
-        one_pixel_attack = OnePixelLogger(project_name= "one_pixel_attack",
+        one_pixel_attack = (enable_one_pixel_attack, OnePixelLogger(project_name= "one_pixel_attack",
                                           model=model,
                                            wandb_config=wandb_config_one_pixel,
                                            popsize = population,
                                             pixels = num_pixels,
                                              steps = onepixel_steps )
+                                        )
+        
+
+    if enable_FGSM:
+
+        wandb_config_fgsm = {
+        "targeted": targeted,
+        "targeted_labels": targeted_labels,
+        "dataset": hugginface_dataset_dir,
+        "model_name": hugginface_model,
+        "epsilon": epsilon_fgsm,
+        "parameter_count": count_parameters(model),
+        "batch_size": batch_size,
+        "attack": "fgsm"
+    }
+        fgsm_attack = (enable_FGSM , FGSMLogger(
+                                project_name= "FGSM_attack",
+                                model=model,
+                                wandb_config = wandb_config_fgsm,
+                                eps=epsilon_fgsm)
+                                                    )
 
     if enable_cw:
-        cw_attack = CWLogger(model=model, steps=steps_cw, kappa=kappa_cw)
+        cw_attack = (enable_cw, CWLogger(model=model, steps=steps_cw, kappa=kappa_cw))
 
     if enable_PGD:
-        pgd_attack = PGDLogger(model, steps=steps_pgd)
+        pgd_attack = (enable_PGD, PGDLogger(model, steps=steps_pgd))
 
-    if use_preprocessor: 
-        processed_dataset = HugginfaceProcessorData(processed_dataset, label_feature_title)
-        test_attack(
-        dataset=processed_dataset, 
-        batch_size= batch_size, 
-        output_dir="./results", 
-        targeted=targeted,
-        attacks=[one_pixel_attack], 
-        device=device
+
+
+
+
+
+
+
+    all_attacks = [one_pixel_attack, fgsm_attack, cw_attack, pgd_attack]
+    processed_dataset = HugginfaceProcessorData(processed_dataset, label_feature_title)
+    # Start  the Attack
+    test_attack(
+    dataset=processed_dataset, 
+    batch_size= batch_size, 
+    output_dir="./results", 
+    targeted=targeted,
+    attacks= [attack for  enable , attack in all_attacks if enable], 
+    hightlight= highlight_enable,
+    device=device
     )
-    else:
-        pass
-    #     test_attack(
-    #     dataset=dataset,
-    #     batch_size=200,
-    #     device="cuda",
-    #     output_dir="./results",
-    #     targeted=targeted,
-    #     attacks=[one_pixel_attack]
-    # )
 
 
 
 
-
-def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks = [], device: str = "cpu"):
+def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks = [], device: str = "cpu", hightlight = True):
     dataloader = DataLoader(dataset, batch_size=batch_size)
     image_title = dataset.image_feature_title
     label_title = dataset.label_title
     used_labels = set()
+    
 
     total_batches = len(dataloader)
     save_interval = max(1, math.ceil(total_batches / 10))  # Ensure at least 1 to avoid division by zero
@@ -282,7 +315,7 @@ def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks =
 
             # Check if it's time to save grid images
             if batch_counter % save_interval == 0:
-                comparison_image = plot_image_comparison(images,adv_images,original_pred, batched_pred, labels, False, 4)
+                comparison_image = plot_image_comparison(images,adv_images,original_pred, batched_pred, labels, hightlight, 4)
                 wandb.log({"Comparison Image": [wandb.Image(comparison_image)]})
             batch_counter += 1
 
