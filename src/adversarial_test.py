@@ -11,7 +11,7 @@ from transformers import CLIPProcessor, CLIPModel
 from utils import read_yaml, getYAMLParameter, HugginfaceProcessorData
 from datasets import load_dataset
 from torch.utils.data import DataLoader
-from logger import OnePixelLogger, CWLogger, PGDLogger,  FGSMLogger
+from logger import OnePixelLogger, CWLogger, PGDLogger,  FGSMLogger, CWLogger
 from utils import plot_grid, getYAMLParameter, l2_distance, plot_image_comparison, conf_matrix_img, count_parameters
 import tqdm
 import wandb
@@ -35,25 +35,6 @@ def parse_args():
 
     return args
 
-
-def infere_titles(titles):
-    """
-    This function exist for classyfying on different names of titles.
-    it will raise an error if  there is an ambigious titles and the program
-    will expect that the user specify the titles of the models.
-    """
-    import nltk
-    from nltk.tokenize import word_tokenize
-
-# Download the NLTK data needed for tokenization
-    nltk.download('punkt')
-
-    titles_list = []
-    for title in titles:
-        title = title.split("/")[-1]
-        title = title.split(".")[0]
-        titles_list.append(title)
-    return titles_list
 
 def main(): 
     args = parse_args()
@@ -140,10 +121,11 @@ def main():
 
 
     #  Carlini Weiner Parameters
-    enable_cw = getYAMLParameter(attacks_config, "carlini_wiener", "enable_attack")
-    steps_cw = getYAMLParameter(attacks_config, "carlini_wiener", "steps")
-    kappa_cw = getYAMLParameter(attacks_config, "carlini_wiener", "kappa")
-
+    enable_cw = getYAMLParameter(attacks_config, "carlini_wagner", "enable_attack")
+    c_cw = getYAMLParameter(attacks_config, "carlini_wagner", "c")
+    kappa_cw = getYAMLParameter(attacks_config, "carlini_wagner", "kappa")
+    steps_cw = getYAMLParameter(attacks_config, "carlini_wagner", "steps")
+    learning_rate_cw = getYAMLParameter(attacks_config, "carlini_wagner", "lr")
 
     # FGSM Parameters
     enable_FGSM = getYAMLParameter(attacks_config, "FGSM", "enable_attack")
@@ -231,9 +213,29 @@ def main():
                                                     )
 
     if enable_cw:
-        cw_attack = (enable_cw, CWLogger(model=model, steps=steps_cw, kappa=kappa_cw))
 
-
+        wandb_config_cw = {
+        "targeted": targeted,
+        "targeted_labels": targeted_labels,
+        "dataset": hugginface_dataset_dir,
+        "model_name": hugginface_model,
+        "c_coefficient": c_cw,
+        "kappa_coefficient": kappa_cw,
+        "steps": steps_cw,
+        "learning_rate": learning_rate_cw,
+        "parameter_count": count_parameters(model),
+        "batch_size": batch_size,
+        "attack": "Carlini_Wagner"
+    }
+        cw_attack = (enable_cw , CWLogger(
+                                project_name= "CW_attack",
+                                model=model,
+                                wandb_config = wandb_config_cw,
+                                c=c_cw,
+                                kappa=kappa_cw,
+                                steps=steps_cw,
+                                lr=learning_rate_cw)
+                                )
     if enable_PGD:
         wandb_config_pgd = {
             "targeted": targeted,
@@ -267,7 +269,6 @@ def main():
     test_attack(
     dataset=processed_dataset, 
     batch_size= batch_size, 
-    output_dir="./results", 
     targeted=targeted,
     attacks= [attack for  enable , attack in all_attacks if enable], 
     hightlight= highlight_enable,
@@ -277,7 +278,7 @@ def main():
 
 
 
-def test_attack(dataset, batch_size,  output_dir: str, targeted: bool, attacks = [], device: str = "cpu", hightlight = True):
+def test_attack(dataset, batch_size,  targeted: bool, attacks = [], device: str = "cpu", hightlight = True):
     dataloader = DataLoader(dataset, batch_size=batch_size)
     image_title = dataset.image_feature_title
     label_title = dataset.label_title

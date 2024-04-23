@@ -27,7 +27,7 @@ one_pixel:
   population_size: 100
 
 FGSM:
-  enable_attack: True
+  enable_attack: False
   epsilon: 0.005
 
 PGD:
@@ -36,10 +36,12 @@ PGD:
   alpha: 0.1
   steps: 100
 
-carlini_weiner:
-  enable_attack: False
-  kappa: 0.01
-  steps: 10000 
+carlini_wagner:
+  enable_attack: true
+  c: 0.5
+  kappa: 0.1
+  steps: 100
+  lr: 0.01 
 
 
 

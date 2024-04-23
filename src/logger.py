@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import wandb
 import torch
 import torch.nn as nn
-import torch.optim.optimizer as optim
+import torch.optim as optim
 import numpy as np
 from  transformers.modeling_outputs import ImageClassifierOutput, ImageClassifierOutputWithNoAttention
 from typing import Tuple
@@ -34,7 +34,7 @@ class AttackLogger:
                    config = self.wandb_config)
         
 
-    def get_logits(self, inputs, labels=None, *args, **kwargs):
+    def get_logits_output(self, inputs, labels=None, *args, **kwargs):
         if self._normalization_applied is False:
             inputs = self.normalize(inputs)
         logits = self.model(inputs)
@@ -66,20 +66,13 @@ class OnePixelLogger(ta.OnePixel, AttackLogger):
         # Forward arguments to the Parent class
         super().__init__(model=model,*args, **kwargs)
     # Wrap the attack call with tqdm for a progress bar
-    def get_logits(self, inputs, labels=None, *args, **kwargs):
-        if self._normalization_applied is False:
-            inputs = self.normalize(inputs)
-        logits = self.model(inputs)
-        if isinstance(logits, ImageClassifierOutput) or isinstance(logits,ImageClassifierOutputWithNoAttention ):
-            logits = logits.logits
-        return logits
-        
+
     def _get_prob(self, images):
         with torch.no_grad():
             batches = torch.split(images, self.inf_batch)
             outs = []
             for batch in batches:
-                out = self.get_logits(batch)
+                out = self.get_logits_output(batch)
                 outs.append(out)
         outs = torch.cat(outs)
         return outs.detach().cpu().numpy()
@@ -164,13 +157,6 @@ class FGSMLogger(ta.FGSM, AttackLogger):
         # Forward arguments to the Parent class
         super().__init__(model=model,eps=eps, *args, **kwargs)
 
-    def get_logits(self, inputs, labels=None, *args, **kwargs):
-        if self._normalization_applied is False:
-            inputs = self.normalize(inputs)
-        logits = self.model(inputs)
-        if isinstance(logits, ImageClassifierOutput) or isinstance(logits,ImageClassifierOutputWithNoAttention ):
-            logits = logits.logits
-        return logits
 
     def forward(self, images, labels):
         r"""
@@ -186,7 +172,7 @@ class FGSMLogger(ta.FGSM, AttackLogger):
         loss = nn.CrossEntropyLoss()
 
         images.requires_grad = True
-        outputs = self.get_logits(images)
+        outputs = self.get_logits_output(images)
 
         # Calculate loss
         if self.targeted:
@@ -213,14 +199,6 @@ class PGDLogger(ta.PGD, AttackLogger):
         # Initialize the ta.PGD base class
         ta.PGD.__init__(self, model=model, eps=eps, alpha=alpha, steps=steps, *args, **kwargs)
 
-    def get_logits(self, inputs, labels=None, *args, **kwargs):
-        if self._normalization_applied is False:
-            inputs = self.normalize(inputs)
-        logits = self.model(inputs)
-        if isinstance(logits, ImageClassifierOutput) or isinstance(logits,ImageClassifierOutputWithNoAttention ):
-            logits = logits.logits
-        return logits
-
     def forward(self, images, labels):
             r"""
             Overridden.
@@ -244,7 +222,7 @@ class PGDLogger(ta.PGD, AttackLogger):
 
             for _ in range(self.steps):
                 adv_images.requires_grad = True
-                outputs = self.get_logits(adv_images)
+                outputs = self.get_logits_output(adv_images)
                 if type(outputs) == ImageClassifierOutput:
                     outputs = outputs.logits
                 # Calculate loss
@@ -273,8 +251,10 @@ class PGDLogger(ta.PGD, AttackLogger):
 
 
 class CWLogger(ta.CW, AttackLogger):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, project_name,model,wandb_config= None, c= 1, kappa = 0,steps = 0, lr= 0.01, *args, **kwargs):
+        AttackLogger.__init__(self, project_name=project_name, wandb_config=wandb_config)
+        # Initialize the ta.CW base class
+        ta.CW.__init__(self, model=model, c=c, kappa=kappa, steps=steps,lr= lr, *args, **kwargs)
 
 
 # TODO: Implement the forward loop with tqdm and wandb
@@ -311,13 +291,14 @@ class CWLogger(ta.CW, AttackLogger):
             current_L2 = MSELoss(Flatten(adv_images), Flatten(images)).sum(dim=1)
             L2_loss = current_L2.sum()
 
-            outputs = self.get_logits(adv_images)
+            outputs = self.get_logits_output(adv_images)
             if self.targeted:
                 f_loss = self.f(outputs, target_labels).sum()
             else:
                 f_loss = self.f(outputs, labels).sum()
 
             cost = L2_loss + self.c * f_loss
+            wandb.log({"loss": cost.item()})
 
             optimizer.zero_grad()
             cost.backward()
@@ -347,5 +328,6 @@ class CWLogger(ta.CW, AttackLogger):
                     return best_adv_images
                 prev_cost = cost.item()
 
-        return best_adv_images
-    
+
+            num_sucesses, num_og_sucesses,batched_predictions, original_predictions = self.get_accuracy(images,best_adv_images, labels)
+            return best_adv_images, num_sucesses,num_og_sucesses, batched_predictions, original_predictions
