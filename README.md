@@ -96,7 +96,7 @@ After configuring your yaml file with the models, dataset and hyperparameters yo
 
 
 ```bash
-python3 src/attack_test.py 
+python3 src/adversarial_test.py 
 ```
 Congratulations you are now running your first attack, you will see in you terminal how the attack is being trained. After finishing the attack you will see the results in your wandb account.
 
